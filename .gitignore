@@ -1,0 +1,23 @@
+# dsh-websearch-direct — 仓库排除项
+# 打包产物：绝不入库（体积 + 每次构建都变）
+*.tgz
+
+# 依赖与日志
+node_modules/
+*.log
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# 本地临时产物与备份
+*.bak
+*.bak-*
+*~
+_*.mjs
+_probe*
+_probe-*
+_review*
+REVIEW-*.md

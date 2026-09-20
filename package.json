@@ -1,0 +1,42 @@
+{
+  "name": "dsh-websearch-direct",
+  "version": "0.4.6",
+  "description": "免 API Key 的 dsh 联网搜索 / 网页抓取插件：引擎=逻辑源、入口=直连/镜像/加速路由自动回退（GitHub/GitLab/Codeberg/Gitea + npm/crates/Packagist/NuGet/RubyGems/Maven/HuggingFace + Bing/百度/DuckDuckGo），代码意图自动路由，可选代理，不消耗任何模型 token。设置页内置配置卡片（一级抽屉）：Key、单入口代理开关、自定义网址、恢复默认。",
+  "keywords": [
+    "dsh-plugin",
+    "web-search",
+    "web-fetch",
+    "no-api-key"
+  ],
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./client": "./client/client.js"
+  },
+  "files": [
+    "dist",
+    "client",
+    "cordis.patch.yml",
+    "LICENSE",
+    "README.md"
+  ],
+  "dsh": {
+    "name": "websearch-direct",
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
+  }
+}

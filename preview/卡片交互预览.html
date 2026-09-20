@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>联网搜索（直连优先）— 设置卡片交互预览</title>
+<style>
+  body{margin:0;padding:28px 20px;background:#f2f3f5;font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;font-size:13px;line-height:1.6;color:#1f2328;}
+  .page{max-width:680px;margin:0 auto;}
+  .banner{font-size:12px;color:#8b93a1;margin:0 0 14px;}
+  .setCard{list-style:none;border:1px solid #e5e7eb;background:#fff;border-radius:12px;transition:border-color .16s,background .16s;}
+  .setCard:hover{border-color:#c8ccd4;}
+  .setCard.open{background:#f7f8fa;border-color:#c8ccd4;}
+  .setHeader{appearance:none;width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer;background:0 0;border:0;border-radius:12px;align-items:center;gap:12px;padding:14px 16px;display:flex;}
+  .setHeadText{flex-direction:column;flex:1;gap:4px;min-width:0;display:flex;}
+  .setName{color:#1f2328;font-size:15px;font-weight:600;line-height:1.4;}
+  .setDesc{color:#8b93a1;font-size:13px;line-height:1.5;}
+  .setChevron{color:#8b93a1;flex:none;transition:transform .16s;display:inline-flex;}
+  .setChevron.open{transform:rotate(180deg);}
+  .setBody{border-top:1px solid #e5e7eb;margin:0 16px;padding-bottom:8px;}
+  .setRow{align-items:center;gap:12px;padding:12px 0;display:flex;}
+  .setRow+.setRow{border-top:1px solid #e5e7eb;}
+  .setLabelBox{flex-direction:column;flex:1;gap:3px;min-width:0;display:flex;}
+  .setLabel{font-size:13px;line-height:20px;}
+  .setHint{color:#8b93a1;font-size:12px;line-height:18px;}
+  .setActions{border-top:1px solid #e5e7eb;justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;display:flex;}
+  .tag{font-size:10.5px;padding:1px 7px;border-radius:999px;border:0.5px solid #e5e7eb;color:#8b93a1;white-space:nowrap;}
+  .tag.on{border-color:rgba(48,150,90,.55);color:#2c9c5c;}
+  .btn{font:inherit;font-size:12.5px;padding:5px 14px;border-radius:8px;border:0.5px solid #d1d5db;background:#fff;color:#1f2328;cursor:pointer;}
+  .btn:hover{background:#f3f4f6;}
+  .btn.primary{background:#4f6ef7;border-color:#4f6ef7;color:#fff;}
+  .btn.primary:disabled{opacity:.45;cursor:default;}
+  .btn.sm{font-size:11px;padding:3px 10px;}
+  .btn.ghost{border-color:transparent;background:transparent;}
+  .btn.ghost:hover{background:#eceef1;}
+  .input{box-sizing:border-box;border:1px solid #d1d5db;background:#fff;color:#1f2328;border-radius:6px;padding:5px 10px;font:inherit;font-size:12.5px;}
+  .input:focus{outline:2px solid #4f6ef7;outline-offset:-1px;}
+  .row{display:flex;align-items:center;gap:10px;}
+  .grow{flex:1;min-width:0;}
+  .cat{border:0.5px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-top:8px;background:#fff;}
+  .catHead{display:flex;align-items:center;gap:8px;width:100%;padding:9px 12px;background:none;border:0;cursor:pointer;font:inherit;text-align:left;}
+  .catHead:hover{background:rgba(127,127,127,.06);}
+  .chev{transition:transform .16s;font-size:11px;opacity:.55;display:inline-block;}
+  .catBody{padding:4px 12px 10px;}
+  .srcHead{display:flex;align-items:center;gap:8px;padding:6px 0 2px;}
+  .srcName{font-size:11px;font-weight:600;color:#8b93a1;letter-spacing:.4px;}
+  .entry{display:flex;align-items:center;gap:8px;padding:3px 0;}
+  .entry .input{flex:1;min-width:0;}
+  .type{flex:none;width:44px;text-align:center;font-size:11px;padding:2px 0;border-radius:999px;border:0.5px solid #e5e7eb;color:#8b93a1;}
+  .type.proxy{border-color:rgba(48,150,90,.55);color:#2c9c5c;}
+  .link{background:none;border:0;padding:0;font:inherit;font-size:11px;cursor:pointer;text-decoration:underline;opacity:.6;white-space:nowrap;color:inherit;}
+  .link:hover{opacity:1;}
+  .del{flex:none;width:18px;height:18px;line-height:16px;text-align:center;border-radius:50%;border:0.5px solid #e5e7eb;background:0 0;cursor:pointer;font-size:11px;color:#8b93a1;padding:0;}
+  .del:hover{color:#c0392b;border-color:#c0392b;}
+  .form{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap;}
+  .form .input{font-size:12px;}
+  .switch{flex:none;width:36px;height:20px;border-radius:999px;background:#c8ccd4;border:0;cursor:pointer;position:relative;padding:0;transition:background .16s;}
+  .switch.on{background:#4f6ef7;}
+  .switch .thumb{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .16s;}
+  .switch.on .thumb{left:18px;}
+  .switch:disabled{opacity:.5;cursor:default;}
+  .status{font-size:12px;color:#8b93a1;}
+  .status.err{color:#c0392b;}
+  .empty{font-size:12px;color:#8b93a1;padding:2px 0;}
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="banner">交互预览 · 数据保存在本页内存（刷新还原），不连接网关</p>
+  <div id="app"></div>
+</div>
+<script>
+(function(){
+  "use strict";
+  /* ---------------- 初始数据（模拟 GET /dsh-websearch-direct/api/config） ---------------- */
+  var initial = {
+    apiKeySet:false, proxyUrl:"",
+    categories:[
+      {id:"code",label:"代码仓库",engines:[
+        {id:"github",label:"GitHub",custom:false,routes:[
+          {key:"github|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:"https://api.github.com",defaultUrl:"https://api.github.com",empty:false},
+          {key:"github|gh-proxy.com",tier:1,type:"proxy",enabled:true,switchable:true,removable:true,url:"https://gh-proxy.com/https://api.github.com",defaultUrl:"https://gh-proxy.com/https://api.github.com",empty:false},
+          {key:"github|gh-proxy.org",tier:1,type:"proxy",enabled:true,switchable:true,removable:true,url:"https://gh-proxy.org/https://api.github.com",defaultUrl:"https://gh-proxy.org/https://api.github.com",empty:false},
+          {key:"github|cors.isteed.cc",tier:1,type:"proxy",enabled:true,switchable:true,removable:true,url:"https://cors.isteed.cc/https://api.github.com",defaultUrl:"https://cors.isteed.cc/https://api.github.com",empty:false}
+        ]},
+        {id:"gitlab",label:"GitLab",custom:false,routes:[
+          {key:"gitlab|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:"https://gitlab.com/api/v4",defaultUrl:"https://gitlab.com/api/v4",empty:false}
+        ]},
+        {id:"codeberg",label:"Codeberg",custom:false,routes:[
+          {key:"codeberg|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:"https://codeberg.org/api/v1",defaultUrl:"https://codeberg.org/api/v1",empty:false}
+        ]},
+        {id:"gitea",label:"Gitea.com",custom:false,routes:[
+          {key:"gitea|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:"https://gitea.com/api/v1",defaultUrl:"https://gitea.com/api/v1",empty:false}
+        ]},
+        {id:"gitee",label:"Gitee 码云",custom:false,routes:[
+          {key:"gitee|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:"https://gitee.com/api/v5",defaultUrl:"https://gitee.com/api/v5",empty:false}
+        ]}
+      ]},
+      {id:"pkg",label:"包管理",engines:[
+        {id:"npm",label:"npm",custom:false,routes:[
+          {key:"npm|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:"https://registry.npmjs.org",defaultUrl:"https://registry.npmjs.org",empty:false}
+        ]},
+        {id:"crates",label:"crates.io",custom:false,routes:[
+          {key:"crates|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:"https://crates.io",defaultUrl:"https://crates.io",empty:false}
+        ]},
+        {id:"packagist",label:"Packagist",custom:false,routes:[
+          {key:"packagist|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:"https://packagist.org",defaultUrl:"https://packagist.org",empty:false}
+        ]}
+      ]},
+      {id:"model",label:"模型仓库",engines:[
+        {id:"huggingface",label:"HuggingFace",custom:false,routes:[
+          {key:"hf|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:"https://huggingface.co",defaultUrl:"https://huggingface.co",empty:false},
+          {key:"hf|镜像",tier:1,type:"proxy",enabled:true,switchable:true,removable:true,url:"https://hf-mirror.com",defaultUrl:"https://hf-mirror.com",empty:false}
+        ]}
+      ]},
+      {id:"web",label:"网页搜索",engines:[
+        {id:"bing",label:"Bing 中国",custom:false,routes:[
+          {key:"bing|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:"https://cn.bing.com",defaultUrl:"https://cn.bing.com",empty:false}
+        ]},
+        {id:"baidu",label:"百度",custom:false,routes:[
+          {key:"baidu|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:"https://www.baidu.com",defaultUrl:"https://www.baidu.com",empty:false}
+        ]},
+        {id:"ddg",label:"DuckDuckGo",custom:false,routes:[
+          {key:"ddg|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:"https://html.duckduckgo.com",defaultUrl:"https://html.duckduckgo.com",empty:false}
+        ]}
+      ]}
+    ],
+    limits:{customMax:8}
+  };
+
+  /* ---------------- 状态 ---------------- */
+  var state = {
+    snapshot: JSON.parse(JSON.stringify(initial)),
+    apiKey:"", clearKey:false, proxyDraft:"",
+    cardOpen:false, openCats:{}, adding:null, proxyFormFor:null,
+    confirming:false, saving:false, status:"", error:"",
+    resetArmed:false
+  };
+
+  function el(tag, attrs, children){
+    var node = document.createElement(tag);
+    if (attrs) for (var k in attrs){
+      if (k === "style") node.setAttribute("style", attrs[k]);
+      else if (k === "class") node.className = attrs[k];
+      else if (k.slice(0,2) === "on") node.addEventListener(k.slice(2), attrs[k]);
+      else if (attrs[k] !== null && attrs[k] !== undefined) node.setAttribute(k, attrs[k]);
+    }
+    (children||[]).forEach(function(c){ if (c!==null && c!==undefined) node.appendChild(c); });
+    return node;
+  }
+  function txt(t){ return document.createTextNode(t); }
+  function isHttpUrl(v){ return /^https?:\/\//i.test(String(v||"").trim()); }
+  function normUrl(v){
+    var t = String(v||"").trim();
+    if (!t) return "";
+    if (!/^https?:\/\//i.test(t)){
+      if (/^[\w.-]+\.[a-z]{2,}$/i.test(t) || /^[\w.-]+\.[a-z]{2,}\//i.test(t)) t = "https://" + t;
+      else return "";
+    }
+    return t;
+  }
+  function savePulse(msg){
+    state.status = msg || "已保存，即时生效。";
+    render();
+    setTimeout(function(){ state.status=""; render(); }, 2200);
+  }
+  function catOf(srcId){ return srcId.replace(/^custom-/,"").replace(/-\d+$/,""); }
+  function srcIndexOf(srcId){ return parseInt(srcId.slice(srcId.lastIndexOf("-")+1),10)-1; }
+
+  /* ---------------- 渲染 ---------------- */
+  var app = document.getElementById("app");
+
+  function render(){
+    app.textContent = "";
+    var S = state.snapshot;
+
+    var root = el("div", {class:"setCard" + (state.cardOpen ? " open" : "")});
+
+    /* 抬头：左点击区展开/收起；右侧常驻 保存/放弃/恢复默认 */
+    var dirtyNow = state.apiKey.trim()!=="" || state.clearKey || state.proxyDraft !== (S.proxyUrl||"");
+    var header = el("div",{class:"setHeader"});
+    header.appendChild(el("div",{style:"display:flex;align-items:center;gap:12px;flex:1;min-width:0;background:none;border:0;cursor:pointer;font:inherit;text-align:left;padding:0;", onclick:function(){ state.cardOpen=!state.cardOpen; render(); }}, [
+      el("div",{class:"setHeadText"},[
+        el("div",{class:"setName"},[txt("联网搜索（直连优先）")]),
+        el("div",{class:"setDesc"},[txt("免 Key 直连搜索与代码仓库聚合，不消耗模型 token。")])
+      ])
+    ]));
+    var headActions = el("div",{style:"display:flex;align-items:center;gap:8px;flex:none;"});
+    if (state.status) headActions.appendChild(el("span",{class:"status"},[txt(state.status)]));
+    if (dirtyNow && !state.saving) headActions.appendChild(el("span",{class:"tag"},[txt("未保存")]));
+    var saveBtn = el("button",{class:"btn primary sm",type:"button"},[txt(state.saving?"保存中…":"保存")]);
+    if (state.saving || !dirtyNow) saveBtn.disabled = true;
+    saveBtn.addEventListener("click", function(e){
+      e.stopPropagation();
+      if (state.saving || !dirtyNow) return;
+      state.saving=true; render();
+      setTimeout(function(){
+        if (state.clearKey){ S.apiKeySet=false; }
+        else if (state.apiKey.trim()){ S.apiKeySet=true; }
+        S.proxyUrl = state.proxyDraft.trim();
+        state.apiKey=""; state.clearKey=false;
+        state.saving=false; savePulse();
+      }, 400);
+    });
+    headActions.appendChild(saveBtn);
+    var discardBtn = el("button",{class:"btn sm",type:"button"},[txt("放弃修改")]);
+    discardBtn.addEventListener("click", function(e){
+      e.stopPropagation();
+      state.apiKey=""; state.clearKey=false; state.proxyDraft=S.proxyUrl||""; state.error=""; state.status=""; render();
+    });
+    headActions.appendChild(discardBtn);
+    var resetBtn = el("button",{class:"btn ghost sm",type:"button"},[txt(state.confirming?"⚠ 确认恢复默认？":"恢复默认")]);
+    resetBtn.addEventListener("click", function(e){
+      e.stopPropagation();
+      if (!state.confirming){ state.confirming=true; render(); setTimeout(function(){ state.confirming=false; render(); },4000); return; }
+      state.confirming=false;
+      state.snapshot = JSON.parse(JSON.stringify(initial));
+      state.apiKey=""; state.clearKey=false; state.proxyDraft="";
+      savePulse();
+    });
+    headActions.appendChild(resetBtn);
+    headActions.appendChild(el("span",{class:"setChevron"+(state.cardOpen?" open":""),style:"cursor:pointer;",onclick:function(){ state.cardOpen=!state.cardOpen; render(); }},[txt("▾")]));
+    root.appendChild(header);
+
+    if (state.cardOpen){
+      var body = el("div",{class:"setBody"});
+
+      /* API Key */
+      var keyInput = el("input",{class:"input",type:"password",style:"flex:1;min-width:0;",
+        placeholder: S.apiKeySet && !state.clearKey ? "已配置，留空保持不变" : "输入 Key",
+        value: state.apiKey, spellcheck:"false"});
+      keyInput.addEventListener("input", function(e){ state.apiKey=e.target.value; if(state.clearKey) state.clearKey=false; render(); });
+      var keyRow = el("div",{class:"row"},[keyInput]);
+      if (S.apiKeySet){
+        keyRow.appendChild(el("button",{class:"btn sm ghost",type:"button",onclick:function(){ state.clearKey=!state.clearKey; state.apiKey=""; render(); }},[txt(state.clearKey?"放弃修改":"清除")]));
+      }
+      body.appendChild(el("div",{class:"setRow"},[
+        el("div",{class:"setLabelBox"},[
+          el("div",{class:"row"},[
+            el("span",{class:"setLabel",style:"flex:1;"},[txt("API Key")]),
+            el("span",{class:"tag"+(S.apiKeySet?" on":""),style:S.apiKeySet?"":"opacity:.7;"},[txt(S.apiKeySet?"已配置":"未配置")])
+          ]),
+          keyRow,
+          el("div",{class:"setHint"},[txt("留空 = 免 Key 直连（默认）；填写后所有联网搜索使用此 Key。")])
+        ])
+      ]));
+
+      /* 全局代理 */
+      var proxyInput = el("input",{class:"input",style:"flex:1;",type:"text",placeholder:"http://127.0.0.1:7890",value:state.proxyDraft,spellcheck:"false"});
+      proxyInput.addEventListener("input", function(e){ state.proxyDraft=e.target.value; render(); });
+      body.appendChild(el("div",{class:"setRow"},[
+        el("div",{class:"setLabelBox"},[
+          el("div",{class:"setLabel"},[txt("全局代理地址")]),
+          proxyInput,
+          el("div",{class:"setHint"},[txt("例如 http://127.0.0.1:7890。留空 = 不走全局代理。")])
+        ])
+      ]));
+
+      if (state.error) body.appendChild(el("p",{class:"status err",style:"margin:8px 0 0;"},[txt(state.error)]));
+
+      /* Key/代理 钉在抬头下方；四个大类放进可上下滑动框 */
+      var scrollBox = el("div",{style:"max-height:400px;overflow-y:auto;margin:8px 0 4px;padding-right:4px;"});
+      S.categories.forEach(function(cat){
+        var open = !!state.openCats[cat.id];
+        var box = el("div",{class:"cat"});
+        box.appendChild(el("button",{class:"catHead",type:"button",onclick:function(){ state.openCats[cat.id]=!open; render(); }},[
+          el("span",{class:"chev",style:"transform:rotate("+(open?90:0)+"deg);"},[txt("▸")]),
+          el("span",{class:"setLabel",style:"flex:1;"},[txt(cat.label)]),
+          el("span",{class:"tag"},[txt(cat.engines.length+" 个源")])
+        ]));
+        if (!open){ box.appendChild(el("div",{style:"height:0;overflow:hidden;"})); scrollBox.appendChild(box); return; }
+        var bodyC = el("div",{class:"catBody"});
+        cat.engines.forEach(function(src){
+          bodyC.appendChild(el("div",{class:"srcHead"},[
+            el("span",{class:"srcName"},[txt(src.label + (src.custom ? "（自定义源）" : ""))]),
+            src.custom ? el("button",{class:"link",type:"button",onclick:function(){ removeSource(src); }},[txt("移除源")]) : null
+          ]));
+          src.routes.forEach(function(route){
+            bodyC.appendChild(entryRow(src, route));
+          });
+          bodyC.appendChild(el("div",{style:"padding:2px 0 4px;"},[
+            el("button",{class:"btn sm ghost",type:"button",onclick:function(){ addProxy(src); }},[txt("＋ 代理网址")])
+          ]));
+        });
+        if (state.adding === cat.id){
+          bodyC.appendChild(addSourceForm(cat.id));
+        } else {
+          bodyC.appendChild(el("div",{style:"padding:6px 0 2px;"},[
+            el("button",{class:"btn sm ghost",type:"button",onclick:function(){ state.adding=cat.id; render(); }},[txt("＋ 添加自定义源")])
+          ]));
+        }
+        box.appendChild(bodyC);
+        scrollBox.appendChild(box);
+      });
+      body.appendChild(scrollBox);
+
+      root.appendChild(body);
+    }
+
+    app.appendChild(root);
+  }
+
+  function entryRow(src, route){
+    var row = el("div",{class:"entry"});
+    row.appendChild(el("span",{class:"type"+(route.type==="proxy"?" proxy":""),style:route.type==="proxy"?"":"opacity:.75;"},[txt(route.type==="proxy"?"代理":"直连")]));
+    var input = el("input",{class:"input",type:"text",value:route.url,
+      placeholder: route.empty ? "代理网址 https://…" : "", spellcheck:"false"});
+    input.addEventListener("change", function(e){
+      var next = e.target.value.trim();
+      if (next === route.url) return;
+      saveUrl(src, route, next);
+    });
+    input.addEventListener("keydown", function(e){ if (e.key==="Enter") e.target.blur(); });
+    row.appendChild(input);
+    if (route.switchable){
+      var sw = el("button",{class:"switch"+(route.enabled?" on":""),type:"button",title:"关闭后这条代理不参与搜索，配置保留",role:"switch","aria-checked":route.enabled?"true":"false"},
+        [el("span",{class:"thumb"})]);
+      sw.addEventListener("click", function(){
+        route.enabled = !route.enabled;
+        savePulse(route.enabled ? "代理已启用。" : "代理已停用（配置保留）。");
+      });
+      row.appendChild(sw);
+    }
+    if (route.removable){
+      row.appendChild(el("button",{class:"del",type:"button",title:"移除",onclick:function(){ removeEntry(src, route); }},[txt("×")]));
+    }
+    return row;
+  }
+
+  function saveUrl(src, route, next){
+    next = String(next||"").trim();
+    if (src.custom){
+      if (route.tier===0){ if (isHttpUrl(next)) route.url = next; }
+      else if (isHttpUrl(next)) route.url = next;
+      else { removeEntry(src, route); return; }
+      savePulse(); return;
+    }
+    if (route.removable){
+      if (!isHttpUrl(next)){ removeEntry(src, route); return; }
+      route.url = next; savePulse(); return;
+    }
+    if (isHttpUrl(next) && next !== route.defaultUrl) route.url = next;
+    else route.url = route.defaultUrl;
+    savePulse();
+  }
+
+  function addProxy(src){
+    src.routes.push({key:src.id+"|代理 "+(src.routes.length),tier:1,type:"proxy",enabled:true,switchable:true,removable:true,url:"",defaultUrl:"",empty:true});
+    render();
+  }
+
+  function removeEntry(src, route){
+    src.routes = src.routes.filter(function(r){ return r.key !== route.key; });
+    savePulse();
+  }
+
+  function removeSource(src){
+    var cat = state.snapshot.categories.find(function(c){ return c.engines.indexOf(src)>=0; });
+    cat.engines = cat.engines.filter(function(e){ return e !== src; });
+    savePulse();
+  }
+
+  function addSourceForm(catId){
+    var nameInput = el("input",{class:"input",type:"text",placeholder:"源名称（如：哔哩哔哩）",style:"width:150px;"});
+    var urlInput = el("input",{class:"input",type:"text",placeholder:"官方网址 https://…",style:"flex:1;min-width:170px;",spellcheck:"false"});
+    var saveBtn = el("button",{class:"btn primary sm",type:"button",disabled:"disabled"},[txt("保存")]);
+    var row = el("div",{class:"form"},[nameInput, urlInput, saveBtn,
+      el("button",{class:"btn sm",type:"button",onclick:function(){ state.adding=null; render(); }},[txt("取消")])]);
+    function check(){ saveBtn.disabled = !!!normUrl(urlInput.value) ? "disabled" : null; }
+    nameInput.addEventListener("input", check);
+    urlInput.addEventListener("input", check);
+    saveBtn.addEventListener("click", function(){
+      if (!!!normUrl(urlInput.value)) return;
+      var cat = state.snapshot.categories.find(function(c){ return c.id===catId; });
+      var max = state.snapshot.limits.customMax;
+      if (cat.engines.length >= max) return;
+      cat.engines.push({id:"custom-"+catId+"-"+(cat.engines.length+1),label:nameInput.value.trim()||urlInput.value.replace(/^https?:\/\//i,""),custom:true,routes:[
+        {key:"custom|直连",tier:0,type:"direct",enabled:true,switchable:false,removable:false,url:normUrl(urlInput.value),defaultUrl:normUrl(urlInput.value),empty:false}
+      ]});
+      state.adding=null;
+      savePulse();
+    });
+    return row;
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

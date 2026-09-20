@@ -1,0 +1,19 @@
+# dsh bundle patch for dsh-websearch-direct.
+#
+# Applied as a profile layer in dsh.profile.bundles order; later layers
+# override earlier ones by entry id, so the `web` row repoint below wins over
+# dsh-base's `searchProvider: deepseek-official` (and over any earlier
+# plugin's repoint). Install this plugin AFTER dsh-web-search-free in the
+# bundles list if you want it to take precedence.
+
+- insert:
+    - id: websearch-direct
+      name: 'dsh-websearch-direct'
+
+# Repoint the web capability seam at this plugin's provider. Both capabilities
+# resolve here, so `web_search` and `web_fetch` are backed by this plugin on
+# every surface (Web / TUI / headless) without mounting tool-web ourselves.
+- id: web
+  config:
+    searchProvider: websearch-direct
+    fetchProvider: websearch-direct
