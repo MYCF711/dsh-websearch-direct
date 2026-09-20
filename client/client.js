@@ -34,6 +34,9 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 	var TEXT = {
 		title: "联网搜索（直连优先）",
 		description: "免 Key 直连搜索与代码仓库聚合，不消耗模型 token。",
+		/* 一级 tab 条（定稿见 preview/卡片交互预览_v3.html L194-195） */
+		tabSources: "入口源管理",
+		tabBasic: "基础设置",
 		apiKey: "API Key",
 		apiKeyHint: "留空 = 免 Key 直连（默认）；填写后所有联网搜索使用此 Key。",
 		apiKeySet: "已配置",
@@ -43,14 +46,17 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 		clearKey: "清除",
 		proxyTitle: "全局代理地址",
 		proxyHint: "例如 http://127.0.0.1:7890。留空 = 不走全局代理。",
+		/* 机制徽章（定稿 B-R2）：由 tier 判定，**不用 route.type** ——
+		   type 实为「是否走全局 ProxyAgent」的传输层设置（dist/index.js:1001），
+		   用它标机制是误称。 */
 		direct: "直连",
-		proxy: "代理",
-		directUnit: " 个源 · 直连",
-		proxyUnit: " 个源 · 代理",
+		accel: "加速",
 		sourcesUnit: " 个源",
 		addProxy: "＋ 代理网址",
 		proxyUrlPlaceholder: "代理网址 https://…",
-		noneYet: "暂无代理网址。",
+		/* D2：同源重复网址（用户裁定：红字提示 + 不可保存，只比同源） */
+		dupUrl: "该网址与同源另一条入口重复",
+		dupSummary: "存在重复网址，无法保存",
 		removeSource: "移除源",
 		addSource: "＋ 添加自定义源",
 		sourceName: "源名称（如：哔哩哔哩）",
@@ -102,27 +108,43 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 			".wsd-cat-body{padding:4px 12px 10px}",
 			".wsd-src-head{display:flex;align-items:center;gap:8px;padding:6px 0 2px}",
 			".wsd-src-name{font-size:11px;font-weight:500;color:var(--dsw-alias-label-tertiary,#8b93a1);letter-spacing:.4px}",
-			".wsd-entry{display:flex;align-items:center;gap:8px;padding:3px 0}",
+			".wsd-entry{display:flex;align-items:center;gap:8px;padding:3px 0;min-width:0}",
 			".wsd-entry .wsd-input{flex:1;min-width:0}",
-			".wsd-type{flex:none;width:44px;text-align:center;font-size:11px;padding:2px 0;border-radius:999px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.3));color:var(--dsw-alias-label-tertiary,#8b93a1)}",
-			".wsd-type.proxy{border-color:rgba(48,150,90,.55);color:#2c9c5c}",
+			/* 机制徽章（用户裁定：**不可点击**，纯标识）。弹性宽度（预留四字）。 */
+			".wsd-mech{flex:none;min-width:44px;padding:2px 9px;text-align:center;font-size:11px;line-height:16px;border-radius:999px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.3));color:var(--dsw-alias-label-tertiary,#8b93a1);background:transparent;font-family:inherit;cursor:default;user-select:none;transition:opacity .16s,border-color .16s,color .16s}",
+			/* 「加速」档：语义绿按 R2 实测取值（亮 green-900 / 暗 green-100），不套 alias token */
+			".wsd-mech.accel{border-color:var(--dsw-static-green-500,#22c55e);color:var(--dsw-static-green-900,#233c2c)}",
+			/* 圆点开关（用户裁定④：改回来承载启停）。停用 ≠ 删除：只翻 enabled。 */
+			".wsd-entry .wsd-switch{flex:none}",
+			/* 停用态 = 整行降透明（条目与网址都保留）。 */
+			".wsd-entryOff{opacity:.45}",
+			/* D2/D3：红色小字提示（错误色取 R2 实测值：亮 red-900 / 暗 red-50） */
+			".wsd-errText{font-size:11px;line-height:16px;color:var(--dsw-static-red-900,#570c0c);padding:2px 0 0 52px}",
+			".wsd-input.invalid{border-color:var(--dsw-static-red-500,#ef4444)}",
+			/* 警告珀（"默认走镜像" 徽标）：亮 amber-900 / 暗 amber-100 */
+			".wsd-warnTag{border-color:var(--dsw-static-amber-500,#f59e0b);color:var(--dsw-static-amber-900,#27241f)}",
 			".wsd-link{background:none;border:0;padding:0;font:inherit;font-size:11px;cursor:pointer;text-decoration:underline;opacity:.6;white-space:nowrap}",
 			".wsd-link:hover{opacity:1}",
 			".wsd-linkbtn{font-size:11px}",
 			".wsd-del{flex:none;width:18px;height:18px;line-height:16px;text-align:center;border-radius:50%;border:0.5px solid var(--dsw-alias-border-l2,#e5e7eb);background:0 0;cursor:pointer;font-size:11px;color:var(--dsw-alias-label-tertiary,#8b93a1);padding:0}",
-			".wsd-del:hover{color:#c0392b;border-color:#c0392b}",
+			".wsd-del:hover{color:var(--dsw-static-red-900,#570c0c);border-color:var(--dsw-static-red-500,#ef4444)}",
 			".wsd-form{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}",
 			".wsd-form input{font-size:12px}",
 			".wsd-input{box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2,#d1d5db);background:var(--dsw-alias-bg-layer-3,#fff);color:var(--dsw-alias-label-primary,#1f2328);border-radius:6px;padding:5px 10px;font:inherit;font-size:12.5px}",
 			".wsd-input:focus{outline:2px solid var(--dsw-alias-brand-primary,#4f6ef7);outline-offset:-1px}",
 			".wsd-status{font-size:12px;color:var(--dsw-alias-label-tertiary,#8b93a1)}",
-			".wsd-status.err{color:#c0392b}",
+			".wsd-status.err{color:var(--dsw-static-red-900,#570c0c)}",
 			".wsd-tabs{display:flex;align-items:center;gap:4px;padding:8px 0 8px;border-bottom:1px solid var(--dsw-alias-border-l2,#e5e7eb);}",
 			".wsd-tabbtn{font:inherit;font-size:12.5px;padding:5px 12px;border-radius:8px;border:0.5px solid transparent;background:0 0;color:var(--dsw-alias-label-secondary,#6b7280);cursor:pointer;}",
 			".wsd-tabbtn:hover{background:rgba(127,127,127,.08)}",
-			".wsd-tabbtn.active{background:var(--dsw-alias-bg-info,#e6ecfd);color:var(--dsw-alias-brand-primary,#3b5bdb);font-weight:600;border-color:rgba(79,110,247,.35)}",
+			/* G6：原用不存在的 --dsw-alias-bg-info（暗色对比度仅 1.13:1）；
+			   改用实测存在的 bg-multi-select（亮 17.46 / 暗 15.38）。 */
+			".wsd-tabbtn.active{background:var(--dsw-alias-bg-multi-select,#e6ecfd);color:var(--dsw-alias-brand-primary,#3b5bdb);font-weight:600;border-color:rgba(79,110,247,.35)}",
 			".wsd-tabRight{margin-left:auto;display:flex;align-items:center;gap:8px;}",
-			".wsd-scroll{max-height:400px;overflow-y:auto;margin:10px 0 4px;padding-right:4px;}",
+			/* 语义色暗色分支：亮色极深 / 暗色极浅，两队最差 ≥11:1（R2 实测） */
+			"@media (prefers-color-scheme:dark){.wsd-mech.accel{color:var(--dsw-static-green-100,#e6faed)}.wsd-errText,.wsd-status.err{color:var(--dsw-static-red-50,#fef2f2)}.wsd-warnTag{color:var(--dsw-static-amber-100,#fef5e7)}.wsd-del:hover{color:var(--dsw-static-red-50,#fef2f2)}}",
+			/* G5.2：窄宽度换行 */
+			".wsd-scroll{max-height:400px;overflow-y:auto;overflow-x:hidden;margin:10px 0 4px;padding-right:4px;}",
 		].join("\n");
 		document.head.appendChild(tag);
 	}
@@ -140,6 +162,54 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 			else return "";
 		}
 		return t;
+	}
+
+	/* -------------------------------------------- 重复网址校验（单一判定处） */
+
+	/**
+	 * 同源重复网址判定 —— **全插件唯一的重复逻辑**，两条路径共用：
+	 *   ① 内置源「＋ 代理网址」追加的 routeExtras 条目；
+	 *   ② 自定义源建源 / 自定义代理条目。
+	 *
+	 * 用户裁定口径：**只比同一源内，跨源不比较**；重复 ⇒ 红字提示 + 禁止保存。
+	 *
+	 * 复数形式同时给出「重复键集合」与「是否本次提交被拦」，供渲染与提交前校验共用，
+	 * 避免同一条规则在两处各写一份（写两份迟早漂移）。
+	 *
+	 * @param {Array} routes 该源的入口数组，元素需含 key 与 url（或 base）
+	 * @returns {{dupKeys:Object, hasDup:boolean}}
+	 */
+	function findDuplicateUrls(routes) {
+		var seen = Object.create(null);
+		var dupKeys = Object.create(null);
+		(Array.isArray(routes) ? routes : []).forEach(function (r) {
+			if (!r) return;
+			/* 空网址是「待填写」占位，不参与重复判定（否则新增的空行会互判重复） */
+			var u = keyOfUrl(r.url !== undefined && r.url !== "" ? r.url : r.base);
+			if (!u) return;
+			if (seen[u]) { dupKeys[r.key] = true; seen[u].forEach(function (k) { dupKeys[k] = true; }); }
+			else seen[u] = [];
+			seen[u].push(r.key);
+		});
+		return { dupKeys: dupKeys, hasDup: Object.keys(dupKeys).length > 0 };
+	}
+
+	/** 单条网址是否与「同源其它入口」重复 —— 供新增输入栏做即时校验。 */
+	function isDuplicateUrl(routes, key, url) {
+		var u = keyOfUrl(url);
+		if (!u) return false;
+		var hit = false;
+		(Array.isArray(routes) ? routes : []).forEach(function (r) {
+			if (!r || r.key === key) return;
+			var other = keyOfUrl(r.url !== undefined && r.url !== "" ? r.url : r.base);
+			if (other && other === u) hit = true;
+		});
+		return hit;
+	}
+
+	/** 重复比较用的规范化键：trim + 小写（大小写与首尾空白不构成"不同网址"）。 */
+	function keyOfUrl(v) {
+		return String(v || "").trim().toLowerCase();
 	}
 
 	/* ---------------------------------------------------------- 组件 */
@@ -162,56 +232,90 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 			open ? createElement("div", { className: "wsd-cat-body" }, props.children) : null);
 	}
 
-	/** 入口行：[直连|代理 标记] + [可编辑网址输入框] + [启用开关(代理)] + [×]。 */
+	/**
+	 * 入口行（用户裁定 v0.4.11）：
+	 *   [机制徽章 **纯标识，不可点**] + [网址：**恒为输入框**] + [圆点开关（switchable 时）] + [×]
+	 *
+	 * 三条用户裁定：
+	 *   - 「直连和加速改成不可点击」⇒ 徽章回归纯标识（去掉 onClick / aria-pressed / onMechClick）。
+	 *     被点也没有任何副作用，故不再需要「受约束切换」那套阻断与提示。
+	 *   - 「网址改成之前那种在输入框的」⇒ 撤销「只读 span → 点击变编辑 / isEditing / onEdit / onCancelEdit」。
+	 *   - 「把圆点开关改回来」⇒ 启停由独立圆点开关承载。
+	 *
+	 * 机制由 **tier** 判定（不是 route.type）。停用态用整行降透明表达，
+	 * **不删条目、不清空网址**（停用 ≠ 删除）—— 开关只翻转 enabled。
+	 */
 	function EntryRow(props) {
 		var route = props.route;
-		var st = useState(route.url);
-		var val = st[0], setVal = st[1];
-		var lastUrl = useRef(route.url);
-		if (lastUrl.current !== route.url) {
-			lastUrl.current = route.url;
-			setVal(route.url);
-		}
-		var isProxy = route.type === "proxy";
+		var isDirect = route.tier === 0;
 		var enabled = route.enabled !== false;
-		var submit = function () {
-			var next = normUrl(val);
-			if (next === route.url) return;
-			props.onUrlSave(route, next);
-		};
-		return createElement("div", { className: "wsd-entry" },
-			createElement("span", { className: "wsd-type" + (isProxy ? " proxy" : "") },
-				isProxy ? TEXT.proxy : TEXT.direct),
+		var isDup = !!props.dupKeys[route.key];
+
+		/* 网址输入框的取值来源（优先级）：
+		 *   ① route.draft —— 用户正在输入的待提交草稿（由 Card 从 pending 投影出来）
+		 *   ② route.url   —— 宿主快照的真实网址
+		 *
+		 * 🔴 为什么不再用「本地 useState 草稿 + isEditing」：
+		 *   宿主按位置生成 key（`自定义代理 ${i+1}`），删掉中间条目后后续 key 前移、
+		 *   与旧 key 复用；本地草稿会把上一行的内容显示到新行上（错位，t8 已踩过）。
+		 *   现在 value 直接投影自「快照 + pending 草稿」这条**唯一数据源**，
+		 *   输入即时可见，且不存在跨行复用。
+		 */
+		var val = route.draft !== undefined ? route.draft : (route.url !== undefined ? route.url : "");
+
+		var badgeCls = "wsd-mech" + (isDirect ? "" : " accel");
+		var badgeTitle = isDirect ? TEXT.direct : TEXT.accel;
+
+		var row = createElement("div", { className: "wsd-entry" + (enabled ? "" : " wsd-entryOff") },
+			/* 机制徽章：**纯标识**，不是按钮、无 onClick、无 aria-pressed。 */
+			createElement("span", {
+				className: badgeCls,
+				title: badgeTitle,
+			}, isDirect ? TEXT.direct : TEXT.accel),
+
+			/* 网址：**恒为输入框**。输入即时写入草稿（乐观），失焦时落 pending 载荷。 */
 			createElement(Input, {
-				className: "wsd-input",
+				className: "wsd-input" + (isDup ? " invalid" : ""),
 				value: val,
 				placeholder: route.empty ? TEXT.proxyUrlPlaceholder : "",
-				onChange: function (e) { setVal(e.target.value); },
-				onBlur: submit,
+				/* data-key：既是可观测标识（测试/排查用），也便于将来做行级定位 */
+				"data-key": route.key,
+				onChange: function (e) { props.onUrlDraft(route, e.target.value); },
+				onBlur: function () { props.onUrlSave(route, val); },
 				onKeyDown: function (e) { if (e.key === "Enter") e.target.blur(); },
 				spellCheck: false,
 			}),
+
+			/* 圆点开关：承载启停（route.switchable 时才有）。**停用 ≠ 删除**。 */
 			route.switchable
 				? createElement(Switch, {
 					checked: enabled,
-					label: "启用此代理",
-					title: "关闭后这条代理不参与搜索，配置保留，可随时再打开",
-					onChange: function (v) { props.onSwitch(route, v); },
+					"data-key": route.key,
+					"aria-label": (isDirect ? TEXT.direct : TEXT.accel) + "·" + (enabled ? "已启用" : "已停用"),
+					onChange: function (next) { props.onSwitch(route, next); },
 				})
 				: null,
+
 			route.removable
 				? createElement("button", {
 					className: "wsd-del",
 					type: "button",
-					title: "移除",
+					title: "移除（会删除条目）",
 					onClick: function () { props.onRemove(route); },
 				}, TEXT.remove)
 				: null);
+
+		/* 行内红字提示：D2 同源重复（每条都提示）。
+		   ⚠️ D2 **必须保留** —— 用户截图上的那条红字就是它生效的证据。 */
+		if (!isDup) return row;
+		return createElement("div", null, row, createElement("div", { className: "wsd-errText" }, TEXT.dupUrl));
 	}
 
 	/** 源块：源名（+自定义源移除）+ 全部入口行 + ＋ 代理网址。 */
 	function SourceBlock(props) {
 		var src = props.source;
+		/* 重复判定走**唯一实现** findDuplicateUrls（模块级），两条路径共用 */
+		var dup = findDuplicateUrls(src.routes);
 		return createElement("div", { key: src.id },
 			createElement("div", { className: "wsd-src-head" },
 				createElement("span", { className: "wsd-src-name" }, src.label),
@@ -226,6 +330,9 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 				return createElement(EntryRow, {
 					key: route.key,
 					route: route,
+					dupKeys: dup.dupKeys,
+					allRoutes: src.routes,
+					onUrlDraft: props.onUrlDraft,
 					onUrlSave: props.onUrlSave,
 					onSwitch: props.onSwitch,
 					onRemove: props.onRemoveEntry,
@@ -239,43 +346,70 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 				}, TEXT.addProxy)));
 	}
 
-	/** 添加自定义源的内联表单：源名称 + 官方网址。 */
+	/**
+	 * 添加自定义源的内联表单：源名称 + 官方网址。
+	 *
+	 * 用户裁定（t8）：
+	 *   - 「自定义不允许键入当前重复的网址」⇒ 同源内查重，重复则**可见拒绝 + 禁止提交**；
+	 *   - 「自定义键应该弹出一个空的输入栏，而不是含有内容的」⇒ 初值恒为空；
+	 *     提交成功/取消后**清空**，下次打开仍是空的（旧实现只在成功回调里清，
+	 *     取消后再开仍留着上次输入 —— 这是用户看到「含有内容」的直接来源）。
+	 */
 	function AddSourceForm(props) {
 		var name = useState("");
 		var nameVal = name[0], setName = name[1];
 		var url = useState("");
 		var urlVal = url[0], setUrl = url[1];
-		var valid = !!normUrl(urlVal);
 		var busy = useState(false);
 		var busyVal = busy[0], setBusy = busy[1];
+
+		var norm = normUrl(urlVal);
+		var valid = !!norm;
+		/* 同源查重：走**唯一实现** isDuplicateUrl（与入口行共用，不写第二份判定）。
+		   该表单新建的源尚无 routes，故与「同类目下已有自定义源的直连网址」比较。 */
+		var dup = norm && props.existingUrls
+			? props.existingUrls.some(function (u) { return keyOfUrl(u) === keyOfUrl(norm); })
+			: false;
+		var canSubmit = valid && !dup && !busyVal;
+
 		var submit = function () {
-			if (!valid || busyVal) return;
+			if (!canSubmit) return;
 			setBusy(true);
-			props.onAddSource({ name: nameVal.trim(), url: normUrl(urlVal), proxies: [] }, function () {
+			props.onAddSource({ name: nameVal.trim(), url: norm, proxies: [] }, function () {
 				setName(""); setUrl(""); setBusy(false);
 			});
 		};
-		return createElement("div", { className: "wsd-form" },
-			createElement(Input, {
-				placeholder: TEXT.sourceName,
-				value: nameVal,
-				onChange: function (e) { setName(e.target.value); },
-				style: { width: 150 },
-			}),
-			createElement(Input, {
-				placeholder: TEXT.sourceUrl,
-				value: urlVal,
-				onChange: function (e) { setUrl(e.target.value); },
-				style: { flex: 1, minWidth: 170 },
-				onKeyDown: function (e) { if (e.key === "Enter") submit(); },
-			}),
-			createElement(Button, {
-				size: "sm",
-				variant: "primary",
-				disabled: !valid || busyVal,
-				onClick: submit,
-			}, busyVal ? "…" : TEXT.save),
-			createElement(Button, { size: "sm", onClick: props.onCancel }, TEXT.cancel));
+		/* 取消也必须清空 —— 否则再打开时输入栏"含有内容"（用户报的正是这个） */
+		var cancel = function () {
+			setName(""); setUrl(""); setBusy(false);
+			props.onCancel();
+		};
+		return createElement("div", null,
+			createElement("div", { className: "wsd-form" },
+				createElement(Input, {
+					placeholder: TEXT.sourceName,
+					value: nameVal,
+					onChange: function (e) { setName(e.target.value); },
+					style: { width: 150 },
+				}),
+				createElement(Input, {
+					className: "wsd-input" + (dup ? " invalid" : ""),
+					placeholder: TEXT.sourceUrl,
+					value: urlVal,
+					onChange: function (e) { setUrl(e.target.value); },
+					style: { flex: 1, minWidth: 170 },
+					onKeyDown: function (e) { if (e.key === "Enter") submit(); },
+				}),
+				createElement(Button, {
+					size: "sm",
+					variant: "primary",
+					/* 重复 ⇒ 禁用（用户：不允许键入当前重复的网址） */
+					disabled: !canSubmit,
+					onClick: submit,
+				}, busyVal ? "…" : TEXT.save),
+				createElement(Button, { size: "sm", onClick: cancel }, TEXT.cancel)),
+			/* 可见反馈：重复时红字提示（不得静默丢输入） */
+			dup ? createElement("div", { className: "wsd-errText", style: { paddingLeft: 0 } }, TEXT.dupUrl) : null);
 	}
 
 	/* ------------------------------------------------------------ 卡片 */
@@ -322,10 +456,32 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 		};
 		useEffect(load, []);
 
+		/* ★ 乐观渲染状态（必须**先于 `dirty`** 声明：dirty 要读它们）。
+		 *
+		 * 用户裁定①：点「＋ 代理网址」必须**立刻**出现可编辑空行。
+		 * 根因回顾：旧实现只把新行写进 `pending.routeExtras`，而渲染只读宿主快照的
+		 * `src.routes` ⇒ 界面不重绘，用户看到「添加代理无法生效」。
+		 * 现在：新增行先落进本地 `optimistic` 并**参与渲染**，保存时才落盘。
+		 * 元素形如 { srcId, custom, url, key }；key 用 `__opt__` 前缀与快照行区分。 */
+		var opt = useState([]);
+		var optimistic = opt[0], setOptimistic = opt[1];
+
+		/* 网址草稿：`key -> 用户正在输入的字符串`（乐观显示，保存时落盘）。
+		 * 它同时是「输入即时可见」与「待提交载荷」的唯一来源。 */
+		var drafts = useState({});
+		var urlDrafts = drafts[0], setUrlDrafts = drafts[1];
+
+		/* ④ 必须在**乐观行/网址草稿**存在时也算「有未保存改动」——
+		 * 否则用户点了「＋ 代理网址」、填好网址，「保存」却是灰的（点不下去）。
+		 * 这是「添加代理无法生效」的第二半：光出现行还不够，还得能落盘。
+		 * （optimistic / urlDrafts 在本函数靠后处 var 声明，故此处需防 undefined。） */
 		var dirty =
 			keyVal.trim() !== "" ||
 			clearFlag ||
-			proxyVal !== (snapshot ? snapshot.proxyUrl || "" : "");
+			proxyVal !== (snapshot ? snapshot.proxyUrl || "" : "") ||
+			(!!optimistic && optimistic.length > 0) ||
+			(!!urlDrafts && Object.keys(urlDrafts).length > 0) ||
+			!!pending;
 
 		var doPost = function (body) {
 			return fetch(API + "/config", {
@@ -336,6 +492,24 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 				if (!r.ok) throw new Error("HTTP " + r.status);
 				return r.json();
 			});
+		};
+
+		/* 提交前的统一重复校验：任一源内出现重复网址即禁止提交（D2）。
+		   走的是**唯一实现** findDuplicateUrls，与渲染共用同一判定。
+		   🔴 必须跑在**投影后的 routes**（快照 + 乐观行 + 网址草稿）上：
+		      只看 snapshot 会漏掉用户刚敲进「＋ 代理网址」新行的重复网址
+		      （实测：新行填成同源直连的网址后「保存」仍可点、且真的落盘了）。
+		   ⚠️ D2 是用户明确要求保留的裁定，不得随其它清理一并删除。 */
+		var hasAnyDuplicate = function () {
+			var S = snapshot || { categories: [] };
+			var hit = false;
+			(S.categories || []).forEach(function (cat) {
+				(cat.engines || []).forEach(function (src) {
+					var rows = (typeof projectRoutes === "function") ? projectRoutes(src) : src.routes;
+					if (findDuplicateUrls(rows).hasDup) hit = true;
+				});
+			});
+			return hit;
 		};
 
 		var afterSave = function () {
@@ -350,14 +524,63 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 				.finally(function () { setSaving(false); });
 		};
 
+		/**
+		 * ★ 提交时**以当前投影为准**重建入口载荷。
+		 *
+		 * 为什么不能只用 `pending`：pending 是**逐次操作**累积出来的，
+		 * 而「＋ 代理网址」那一刻行还是空的（`{url:""}`）—— 用户随后才把网址敲进去。
+		 * 若直接提交 pending，落盘的就是那个空条目（实测：载荷 `[{url:""}]`，
+		 * 既丢了用户填的网址，又把空行写进配置）。
+		 * ⇒ 保存时按每个源重新计算一次「乐观行 + 草稿 + 既有条目」的最终形态，
+		 *   并且**过滤掉仍为空的乐观行**（占位行不落盘）。
+		 */
+		var buildEntryPayload = function () {
+			var routeExtras = {};
+			var custom = (pending && pending.custom) || {};
+			(snapshot && snapshot.categories ? snapshot.categories : []).forEach(function (cat) {
+				(cat.engines || []).forEach(function (src) {
+					if (src.custom) return;                       // 自定义源走 custom 载荷
+					var rows = commitRoutes(src).filter(function (r) { return r.removable; });
+					var urls = rows
+						.map(function (r) { return { url: r.url }; })
+						.filter(function (r) { return isHttpUrl(r.url); });
+					/* 与 pending 里的既有结果合并：只要该源在 pending 里出现过，
+					   就以「投影」为准重新算一遍（投影里已包含既有条目与乐观行）。 */
+					if (pending && pending.routeExtras[src.id]) routeExtras[src.id] = urls;
+					else if (urls.length && hasOptimistic(src.id)) routeExtras[src.id] = urls;
+				});
+			});
+			return { routeExtras: routeExtras, custom: custom };
+		};
+		var hasOptimistic = function (srcId) {
+			return optimistic.some(function (o) { return o.srcId === srcId; });
+		};
+
+		/** 「保存」= 统一提交：Key / 全局代理 + 全部累积的入口行改动（批量语义）。 */
 		var save = function () {
+			if (hasAnyDuplicate()) {
+				setError(TEXT.dupSummary);
+				return;
+			}
 			setSaving(true);
 			var body = { proxyUrl: proxyVal.trim() };
 			if (clearFlag) body.clearApiKey = true;
 			else if (keyVal.trim()) body.apiKey = keyVal.trim();
+			/* 累积的入口行改动一并落盘：三组可选载荷按需带上 */
+			if (pending) {
+				if (Object.keys(pending.routeOverrides).length) body.routeOverrides = pending.routeOverrides;
+			}
+			var built = buildEntryPayload();
+			if (Object.keys(built.routeExtras).length) body.routeExtras = built.routeExtras;
+			if (Object.keys(built.custom).length) body.custom = built.custom;
 			return doPost(body)
 				.then(function () {
 					setKey(""); setKeyClear(false);
+					setPending(null);
+					/* ★ 乐观行与本地草稿一并清空：随后 load() 取回的宿主快照才是唯一真相，
+					   这样乐观行被真实行**替换**而不是叠加（不得出现重复行）。 */
+					setOptimistic([]);
+					setUrlDrafts({});
 					load();
 					afterSave();
 				})
@@ -365,9 +588,14 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 				.finally(function () { setSaving(false); });
 		};
 
+		/** 「放弃修改」：Key / 全局代理 / **全部累积的入口行改动** 一并还原。 */
 		var discard = function () {
 			setKey(""); setKeyClear(false);
 			setProxyDraft(snapshot ? snapshot.proxyUrl || "" : "");
+			setPending(null);
+			/* ★ 乐观行与网址草稿一并还原（用户要求「放弃修改」能撤销刚加的行） */
+			setOptimistic([]);
+			setUrlDrafts({});
 			setError(null); setStatus("");
 		};
 
@@ -416,22 +644,98 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 			body.custom[catId] = ordered;
 			return body;
 		};
+		/**
+		 * 从自定义源 id 解析类目 id。
+		 *
+		 * 🔴 只接受 `custom-<catId>-<n>` 形态。**非自定义源返回 ""**，
+		 * 不再原样回吐 —— 旧写法 `.replace(/^custom-/,"").replace(/-\d+$/,"")`
+		 * 对内置源（如 `bing`）两个正则都不匹配，会**静默返回 `bing`**，
+		 * 于是 `rebuildCustom("bing")` 找不到类目、落到 `|| {engines:[]}`，
+		 * 最终把 `custom:{"bing":[]}` 这种**垃圾键**写进配置且无任何提示。
+		 * （当前 UI 上「移除源」仅对自定义源渲染，故这条路**潜伏未触发**；
+		 *   但两个静默叠在一起，一旦复用就会污染配置 —— 故在此显式判定。）
+		 */
 		var catIdOf = function (src) {
-			return src.id.replace(/^custom-/, "").replace(/-\d+$/, "");
+			var id = String((src && src.id) || "");
+			if (!/^custom-/.test(id)) return "";
+			return id.replace(/^custom-/, "").replace(/-\d+$/, "");
 		};
 		var srcIndex = function (src) {
 			return parseInt(src.id.slice(src.id.lastIndexOf("-") + 1), 10) - 1;
 		};
 
-		/* ---- 入口级操作：全部即时持久化 ---- */
+		/* ---- 入口级操作：**累积待提交** + **乐观渲染**，点「保存」统一落盘 ---- */
 
+		/* 用户裁定：入口行改动不再即时 POST。改网址 / 开关 / ＋代理 / ×移除
+		   全部写进 pending 草稿，点「保存」一次性提交，「放弃修改」一并还原。
+		   pending 为 null 表示「无待提交改动」。 */
+		var pend = useState(null);
+		var pending = pend[0], setPending = pend[1];
+
+		/**
+		 * 取当前 pending 的可写副本（无则新建）。
+		 *
+		 * 🔴 `custom` 必须**从宿主快照预置**该自定义源的完整条目列表（rebuildCustom 语义），
+		 * 否则 `p.custom[catId]` 是空的 `[]`，`arr[srcIndex]` 取不到条目 ⇒
+		 * 「开关 / 改网址 / 加代理」在自定义源上**静默什么都不做**
+		 * （实测：sw-custom 的落盘载荷是 `{}`）。内置源不受影响（走 routeExtras/routeOverrides）。
+		 */
+		var withPending = function (mutate) {
+			var next = pending
+				? { routeOverrides: Object.assign({}, pending.routeOverrides),
+					routeExtras: Object.assign({}, pending.routeExtras),
+					custom: Object.assign({}, pending.custom) }
+				: { routeOverrides: {}, routeExtras: {}, custom: {} };
+			mutate(next);
+			setPending(next);
+		};
+
+		/** 把某个自定义源的当前条目（快照 → custom 载荷形态）取出来，供写入路径使用。 */
+		var customItemsOf = function (engId) {
+			var catId = catIdOf({ id: engId });
+			if (!catId || !snapshot) return null;
+			var cat = (snapshot.categories || []).find(function (c) { return c.id === catId; });
+			if (!cat) return null;
+			var list = (cat.engines || []).filter(function (e) { return e.custom; }).map(function (e) {
+				var direct = "";
+				var proxies = [];
+				(e.routes || []).forEach(function (r2) {
+					if (r2.tier === 0) direct = r2.url;
+					else if (isHttpUrl(r2.url)) {
+						var entry = { url: r2.url };
+						if (r2.enabled === false) entry.enabled = false;
+						proxies.push(entry);
+					}
+				});
+				return { name: e.label, url: direct, proxies: proxies };
+			});
+			return { catId: catId, list: list };
+		};
+
+		/** 网址输入：**只改本地草稿**（即时可见），pending 由落点（blur / 开关 / 加行）统一物化。 */
+		var onUrlDraft = function (route, nextUrl) {
+			setUrlDrafts(function (prev) {
+				var next = Object.assign({}, prev);
+				next[route.key] = String(nextUrl === undefined ? "" : nextUrl);
+				return next;
+			});
+		};
+
+		/**
+		 * 落定某一条的网址（失焦时）。
+		 *
+		 * 「清空网址 = 移除该条」是本插件既有语义（宿主 dist 里 `item.proxies.splice`）。
+		 * 而**开关**走的是另一条路（只翻 enabled，见 onSwitch），两者不得混淆。
+		 */
 		var onUrlSave = function (route, nextUrl) {
-			var next = String(nextUrl || "").trim();
+			var draft = urlDrafts[route.key];
+			var next = String((draft !== undefined ? draft : nextUrl) || "").trim();
 			var srcId = route.key.split("|")[0];
 			if (route.custom) {
-				// 自定义源：直连清空忽略；代理清空 = 移除
-				var body = rebuildCustom(catIdOf({ id: srcId }), function (ordered) {
-					var item = ordered[srcIndex({ id: srcId })];
+				withPending(function (p) {
+					var engId = srcId;
+					var seed = p.custom[catIdOf({ id: engId })] || (customItemsOf(engId) ? customItemsOf(engId).list.map(function (x) { return { name: x.name, url: x.url, proxies: x.proxies.map(function (y) { return Object.assign({}, y); }) }; }) : []); p.custom[catIdOf({ id: engId })] = seed; var arr = seed;
+					var item = arr[srcIndex({ id: engId })];
 					if (!item) return;
 					if (route.tier === 0) {
 						if (isHttpUrl(next)) item.url = next;
@@ -449,52 +753,61 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 						j++;
 					}
 				});
-				run(doPost(body));
 				return;
 			}
 			if (route.removable) {
-				// 内置源追加的代理入口（存 routeExtras）；清空 = 移除
-				var urls = route.allRoutes.filter(function (r3) { return r3.key !== route.key; })
-					.map(function (r3) { return { url: r3.url }; })
-					.filter(function (r3) { return isHttpUrl(r3.url); });
-				var m1 = {};
-				m1[srcId] = urls;
-				run(doPost({ routeExtras: m1 }));
+				withPending(function (p) {
+					/* 乐观行（key 以 __opt__ 前缀）不在 allRoutes 里，它经由
+					   「既有 removable 条目 + 乐观行」合成后整体回传。 */
+					var own = route.allRoutes.filter(function (r3) { return r3.key !== route.key; });
+					var optRows = own.filter(function (r3) { return r3.key.indexOf("__opt__") === 0; });
+					var kept = own.filter(function (r3) { return r3.key.indexOf("__opt__") !== 0; });
+					var urls = kept.map(function (r3) { return { url: r3.url }; })
+						.filter(function (r3) { return isHttpUrl(r3.url); });
+					if (isHttpUrl(next)) {
+						/* 改写：替换该条（保持顺序） */
+						urls = kept.map(function (r3) {
+							return { url: r3.key === route.key ? next : r3.url };
+						}).filter(function (r3) { return isHttpUrl(r3.url); });
+					}
+					optRows.forEach(function (r3) {
+						if (isHttpUrl(r3.url)) urls.push({ url: r3.url });
+					});
+					p.routeExtras[srcId] = urls;
+				});
 				return;
 			}
-			var body2 = { routeOverrides: {} };
-			if (isHttpUrl(next) && next !== route.defaultUrl) body2.routeOverrides[route.key] = { url: next };
-			else body2.routeOverrides[route.key] = null;
-			run(doPost(body2));
+			withPending(function (p) {
+				p.routeOverrides[route.key] = (isHttpUrl(next) && next !== route.defaultUrl)
+					? { url: next } : null;
+			});
 		};
 
 		var onRemoveEntry = function (route) {
 			if (!route.removable) return;
 			var srcId = route.key.split("|")[0];
 			if (route.custom) {
-				var body = rebuildCustom(catIdOf({ id: srcId }), function (ordered) {
-					var item = ordered[srcIndex({ id: srcId })];
+				withPending(function (p) {
+					var engId = srcId;
+					var seed = p.custom[catIdOf({ id: engId })] || (customItemsOf(engId) ? customItemsOf(engId).list.map(function (x) { return { name: x.name, url: x.url, proxies: x.proxies.map(function (y) { return Object.assign({}, y); }) }; }) : []); p.custom[catIdOf({ id: engId })] = seed; var arr = seed;
+					var item = arr[srcIndex({ id: engId })];
 					if (!item) return;
 					var j = 0;
 					for (var i2 = 0; i2 < route.allRoutes.length; i2++) {
 						var r2 = route.allRoutes[i2];
 						if (r2.tier !== 1) continue;
-						if (r2.key === route.key) {
-							item.proxies.splice(j, 1);
-							return;
-						}
+						if (r2.key === route.key) { item.proxies.splice(j, 1); return; }
 						j++;
 					}
 				});
-				run(doPost(body));
 				return;
 			}
-			var urls = route.allRoutes.filter(function (r3) { return r3.key !== route.key; })
-				.map(function (r3) { return { url: r3.url }; })
-				.filter(function (r3) { return isHttpUrl(r3.url); });
-			var m3 = {};
-			m3[srcId] = urls;
-			run(doPost({ routeExtras: m3 }));
+			withPending(function (p) {
+				p.routeExtras[srcId] = route.allRoutes
+					.filter(function (r3) { return r3.key !== route.key; })
+					.map(function (r3) { return { url: r3.url }; })
+					.filter(function (r3) { return isHttpUrl(r3.url); });
+			});
 		};
 
 		var onAddSource = function (catId, item, done) {
@@ -509,51 +822,145 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 				.finally(function () { setSaving(false); });
 		};
 
+		/**
+		 * 移除自定义源。
+		 *
+		 * 契约（t7-F1 修复）：**纳入 pending，不得即时 POST** ——
+		 * 五类入口操作（改网址 / 开关 / ＋代理 / ×移除条目 / 移除源）一律累积待提交，
+		 * 点「保存」统一落盘、「放弃修改」一并还原。
+		 * 旧实现直接 `run(doPost(body))`，会让「移除源」在用户攒着其它改动时**单独立刻提交**，
+		 * 造成部分落盘的困惑状态。
+		 */
 		var onRemoveSource = function (src) {
-			var body = rebuildCustom(catIdOf(src), function (ordered) {
-				ordered.splice(srcIndex(src), 1);
+			if (!src || !src.custom) return;          // 仅自定义源可移除（与 UI 渲染条件一致）
+			var catId = catIdOf(src);
+			if (!catId) return;                        // id 非法 ⇒ 不产生任何写操作
+			withPending(function (p) {
+				var arr = (p.custom[catId] || []).slice();
+				var i = srcIndex(src);
+				if (i >= 0 && i < arr.length) arr.splice(i, 1);
+				p.custom[catId] = arr;
 			});
-			run(doPost(body));
 		};
 
-		/** 代理行的蓝色滑动开关：停用 / 启用，即时生效（配置保留）。
-		 *  自定义代理：启停状态写在条目本身（custom.proxies[proxyIndex].enabled，
-		 *  按位置定位，删除其它代理导致 label 重排不影响）；内置源追加代理
-		 *  仍走 routeOverrides（label 稳定，由 routeExtras 整体重写）。 */
+		/**
+		 * 圆点开关：停用 / 启用（用户裁定④「把圆点开关改回来」）。
+		 *
+		 * ★ 底线：**停用 ≠ 删除** —— 只翻转 `enabled`：
+		 *   内置源 → `routeOverrides[key] = {enabled:false|true}`
+		 *   自定义源 → `proxies[i].enabled = false`（启用则删掉该字段回默认）
+		 * **绝不** `splice` 掉条目、**绝不**清空网址。宿主侧依据：
+		 *   dist L1515/L1518/L1537 保留条目只标 false，runEngine 只过滤出请求。
+		 * 对照：清空网址 = 移除（那条路只属于 onUrlSave）。
+		 */
 		var onSwitch = function (route, enabled) {
+			var srcId = route.key.split("|")[0];
 			if (route.custom && typeof route.proxyIndex === 'number') {
-				var engId = route.key.split("|")[0];
-				var body = rebuildCustom(catIdOf({ id: engId }), function (ordered) {
-					var item = ordered[srcIndex({ id: engId })];
+				withPending(function (p) {
+					var engId = srcId;
+					var seed = p.custom[catIdOf({ id: engId })] || (customItemsOf(engId) ? customItemsOf(engId).list.map(function (x) { return { name: x.name, url: x.url, proxies: x.proxies.map(function (y) { return Object.assign({}, y); }) }; }) : []); p.custom[catIdOf({ id: engId })] = seed; var arr = seed;
+					var item = arr[srcIndex({ id: engId })];
 					if (!item) return;
-					var p = item.proxies[route.proxyIndex];
-					if (p) { if (enabled) delete p.enabled; else p.enabled = false; }
+					var pp = item.proxies[route.proxyIndex];
+					if (pp) { if (enabled) delete pp.enabled; else pp.enabled = false; }
 				});
-				run(doPost(body));
 				return;
 			}
-			var body = { routeOverrides: {} };
-			body.routeOverrides[route.key] = enabled ? { enabled: true } : { enabled: false };
-			run(doPost(body));
+			withPending(function (p) {
+				p.routeOverrides[route.key] = enabled ? { enabled: true } : { enabled: false };
+			});
 		};
 
-		/** ＋ 代理网址：统一加一条空位行（输入后落库，清空 = 移除）——
-		 *  内置源与自定义源同交互。 */
+		/** ＋ 代理网址：① 立刻插一条乐观空行（用户裁定：点了必须马上看见），
+		 *  ② 同时把 pending 载荷备好，保存时落盘。
+		 *
+		 *  🔴 内置源只许回传「用户自己加的那些入口」：宿主快照里 `removable===true`
+		 *  且非自定义源的路由，就是 routeExtras 里的条目（宿主 uiSnapshot 的
+		 *  `removable: !!r.extra || (isCustom && r.tier !== 0)`，`extra` 字段本身不外露）。
+		 *  曾经写成「所有 http 路由」→ 每次点按钮都把内置直连/备用入口当成新 entry
+		 *  回传一次 → 宿主重新追加 → 代理行成倍复制。 */
 		var onAddProxy = function (src) {
+			var optKey = "__opt__" + src.id + "|" + Date.now();
+			/* ★ 乐观渲染：本地先加一行，界面**立即**重绘（不等保存、不等 load） */
+			setOptimistic(function (prev) {
+				return prev.concat([{ srcId: src.id, custom: !!src.custom, url: "", key: optKey }]);
+			});
 			if (src.custom) {
-				var body = rebuildCustom(catIdOf(src), function (ordered) {
-					var item = ordered[srcIndex(src)];
+				withPending(function (p) {
+					var engId = src.id;
+					var seed = p.custom[catIdOf({ id: engId })] || (customItemsOf(engId) ? customItemsOf(engId).list.map(function (x) { return { name: x.name, url: x.url, proxies: x.proxies.map(function (y) { return Object.assign({}, y); }) }; }) : []); p.custom[catIdOf({ id: engId })] = seed; var arr = seed;
+					var item = arr[srcIndex({ id: engId })];
 					if (item) item.proxies.push({ url: "" });
 				});
-				run(doPost(body));
 				return;
 			}
-			var urls = src.routes.map(function (r2) { return { url: r2.url }; })
-				.filter(function (r2) { return isHttpUrl(r2.url); });
-			urls.push({ url: "" });
-			var m2 = {};
-			m2[src.id] = urls;
-			run(doPost({ routeExtras: m2 }));
+			withPending(function (p) {
+				/* 🔴 只回传「用户自己加的那些入口」（removable=true），
+				   不能把内置直连/备用也算进去 —— 那会让宿主成倍追加（0.4.8 的坑）。 */
+				var urls = src.routes
+					.filter(function (r2) { return r2.removable; })
+					.map(function (r2) { return { url: r2.url }; })
+					.filter(function (r2) { return isHttpUrl(r2.url); });
+				urls.push({ url: "" });
+				p.routeExtras[src.id] = urls;
+			});
+		};
+
+		/**
+		 * ★ 把「乐观行 + 网址草稿 + 待提交的开关/网址覆盖」投影成**渲染用的 routes**。
+		 *
+		 * 这是修「添加代理无法生效」的关键：渲染不再只看宿主快照，
+		 * 而是看「快照 + 本地草稿」——点了就看得见，输入就看得见。
+		 * 保存后 `load()` 取回真实快照，本地草稿清空 ⇒ 乐观行被真实行替换，**不重复**。
+		 */
+		var projectRoutes = function (src) {
+			var role = src.custom ? "custom" : "builtin";
+			var rows = src.routes.map(function (r) {
+				var out = Object.assign({}, r);
+				var d = urlDrafts[r.key];
+				if (d !== undefined) {
+					out.draft = d;
+					out.url = d;
+				}
+				/* 开关的乐观投影：停用立刻体现在整行降透明上 */
+				if (out.enabled !== false && pending && pending.routeOverrides &&
+					pending.routeOverrides[r.key] && pending.routeOverrides[r.key].enabled === false) {
+					out.enabled = false;
+				}
+				return out;
+			});
+			optimistic.forEach(function (o) {
+				if (o.srcId !== src.id) return;
+				var d = urlDrafts[o.key];
+				rows = rows.concat([{
+					key: o.key,
+					tier: 1,
+					engineId: src.id,
+					custom: !!src.custom,
+					url: d !== undefined ? d : "",
+					draft: d !== undefined ? d : "",
+					defaultUrl: "",
+					type: "proxy",
+					enabled: true,
+					switchable: true,
+					removable: true,
+					empty: true,
+				}]);
+			});
+			void role;
+			return rows;
+		};
+
+		/**
+		 * ★ 保存载荷用的 routes：乐观行参与提交，**空网址的行一律不落盘**。
+		 * （刚加还没填的空行只是 UI 占位；宿主不该收到空条目 —— 否则每次保存都会
+		 *   多出一条垃圾。用户裁定：保存前填了才生效。）
+		 */
+		var commitRoutes = function (src) {
+			var rows = projectRoutes(src).filter(function (r) {
+				return r.key.indexOf("__opt__") !== 0 || isHttpUrl(r.url);
+			});
+			return rows;
 		};
 
 		/** 给入口行补全路由级信息（engineId/custom/allRoutes/proxyIndex），供保存时定位。 */
@@ -575,6 +982,46 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 						createElement("div", { className: "wsd-setName" }, TEXT.title),
 						createElement("div", { className: "wsd-setDesc wsd-status err" }, error))));
 		}
+
+		/* 动作按钮行（官方排序：恢复默认最左 → 放弃修改 → 保存最右），两个 tab 各一份，置于内容右下角。
+		   重建自 preview/卡片交互预览_v3.html 的定稿实现；handler 复用本组件已有的
+		   resetAll / discard / save / confirming / setConfirming / statusMsg / error / saving。 */
+		var dupBlocked = hasAnyDuplicate();
+
+		var actionsRow = function () {
+			return createElement("div", { className: "wsd-setActions" },
+				statusMsg ? createElement("span", { className: "wsd-status", style: { marginRight: "auto" } }, statusMsg) : null,
+				error ? createElement("span", { className: "wsd-status err", style: { marginRight: "auto" } }, error) : null,
+				dupBlocked ? createElement("span", { className: "wsd-status err", style: { marginRight: "auto" } }, TEXT.dupSummary) : null,
+				createElement(Button, {
+					size: "sm",
+					className: "wsd-btn",
+					onClick: function () {
+						if (!confirming) {
+							setConfirming(true);
+							if (confirmTimer.current) clearTimeout(confirmTimer.current);
+							confirmTimer.current = setTimeout(function () { setConfirming(false); }, 4000);
+							return;
+						}
+						if (confirmTimer.current) clearTimeout(confirmTimer.current);
+						setConfirming(false);
+						resetAll();
+					},
+				}, confirming ? TEXT.resetAllConfirm : TEXT.resetAll),
+				createElement(Button, {
+					size: "sm",
+					className: "wsd-btn",
+					onClick: function () { discard(); },
+				}, TEXT.discard),
+				createElement(Button, {
+					size: "sm",
+					variant: "primary",
+					className: "wsd-btn primary",
+					/* D2：存在重复网址时禁止保存（用户裁定：不可保存） */
+					disabled: saving || !dirty || dupBlocked,
+					onClick: function () { if (!saving && dirty && !dupBlocked) save(); },
+				}, saving ? TEXT.saving : TEXT.save));
+		};
 
 		var catToggle = function (id) {
 			setOpenCats(function (prev) {
@@ -617,9 +1064,9 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 									onClick: function () { setActiveTab("basic"); },
 								}, TEXT.tabBasic),
 								createElement("div", { className: "wsd-tabRight" },
-									state.status ? createElement("span", { className: "wsd-status" }, state.status) : null,
-									state.error ? createElement("span", { className: "wsd-status err" }, state.error) : null,
-									dirty && !state.saving ? createElement("span", { className: "wsd-tag" }, TEXT.dirty) : null))),
+									statusMsg ? createElement("span", { className: "wsd-status" }, statusMsg) : null,
+									error ? createElement("span", { className: "wsd-status err" }, error) : null,
+									dirty && !saving ? createElement("span", { className: "wsd-tag" }, TEXT.dirty) : null))),
 
 							/* ---- tab 内容：入口源管理 ---- */
 							activeTabVal === "sources"
@@ -634,9 +1081,20 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 												onToggle: function () { catToggle(cat.id); },
 											},
 												cat.engines.map(function (src) {
+													/* ★ 渲染用的 routes = 「宿主快照 + 乐观行 + 网址草稿 + 开关草稿」投影。
+													   这是修「添加代理无法生效」的关键：渲染不再只看宿主快照。
+													   保存时用 commitRoutes（空网址的乐观行不落盘）。 */
+													var viewSrc = Object.assign({}, src, {
+														routes: projectRoutes(src).map(decorate(src)),
+														commitRoutes: commitRoutes,
+													});
 													return createElement(SourceBlock, {
 														key: src.id,
-														source: src,
+														/* 入口行必须带路由级信息（allRoutes/engineId/custom/proxyIndex）：
+														   onUrlSave / onSwitch / onRemoveEntry 都按 route.allRoutes 定位。
+														   SourceBlock 是顶层函数，看不到 Card 里的 decorate，故在此就地装饰。 */
+														source: viewSrc,
+														onUrlDraft: onUrlDraft,
 														onUrlSave: onUrlSave,
 														onSwitch: onSwitch,
 														onRemoveEntry: onRemoveEntry,
@@ -644,10 +1102,20 @@ window.__ModuleLoader__.load({ id: "dsh-websearch-direct", factory: (require) =>
 														onAddProxy: onAddProxy,
 													});
 												}),
-												adding === cat.id
+												addingVal === cat.id
 													? createElement(AddSourceForm, {
 														onAddSource: function (item, done) { onAddSource(cat.id, item, done); },
 														onCancel: function () { setAdding(null); },
+														/* 同源查重的比较基准：该**类目**下所有已有入口的网址
+														   （含自定义源的直连与代理，含内置源与用户追加项）。
+														   用户口径：同一源内比较，跨源不比。 */
+														existingUrls: cat.engines.reduce(function (acc, e2) {
+															(e2.routes || []).forEach(function (r2) {
+																var u = r2.url !== undefined && r2.url !== "" ? r2.url : r2.base;
+																if (u) acc.push(u);
+															});
+															return acc;
+														}, []),
 													})
 													: createElement("div", { style: { padding: "6px 0 2px" } },
 														createElement(Button, {

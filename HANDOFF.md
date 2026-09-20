@@ -1,7 +1,106 @@
 # dsh-websearch-direct 交接文档
 
 > 面向接手的 agent。读完这份即可独立维护/二次开发这个插件。
-> 最后更新：2026-09-20，版本 v0.4.6（已部署于测试实例并线上运行）。
+> 最后更新：2026-09-21，版本 **v0.4.9**（修复 0.4.6 展开崩溃 + 0.4.7 入口行操作崩溃 + 0.4.8 tab 无文字/＋代理网址复制；已部署于 DSH Desktop 日常实例）。
+
+---
+
+## 0. ⚠️ 必读：浏览器半边的五个缺陷（0.4.6 / 0.4.7 / 0.4.8 → 0.4.9 全修）
+
+**这两个版本的 `client/client.js` 都带着必崩缺陷出厂**，且都只在**展开卡片后**才触发。0.4.8 一次修完。
+
+### 缺陷 A/B（0.4.6 出厂即坏）—— 展开卡片即崩
+
+**现象**：卡片能出现，**一点标题行整张卡片就从列表消失**（每次必现；F5 后回来、再点又消失）。
+
+```
+ReferenceError: state is not defined   at Card (client.js:620)
+❌ slot entry crashed in `settings.plugin.item`
+```
+
+| # | 缺陷 | 为什么"看着正常" |
+| --- | --- | --- |
+| A | 引用了不存在的 `state`（改名残留；真实绑定是 `statusMsg`/`error`/`saving`） | 三行位于 `!open ? null : …` 的**展开分支**，收起时从不求值 |
+| B | `actionsRow` 被调用（L660、L704）但**整个函数体丢失** | 同样只在展开时执行 |
+
+宿主对槽位条目是**按条目捕获并卸载**，所以症状是"整卡消失"而不是红屏。
+
+### 缺陷 C（0.4.7 仍带）—— 点入口行的「×」/ 改网址即崩
+
+**现象**（展开后点代理行的 ×）：`Uncaught TypeError: Cannot read properties of undefined (reading 'filter')` at `onRemoveEntry`。
+
+**根因**：`Card` 里定义了 `decorate(src)`，作用是给每条 route 补 `allRoutes: src.routes`（以及 `engineId`/`custom`/`proxyIndex`），**但它从未被调用**（死代码）。而 `onUrlSave` / `onSwitch` / `onRemoveEntry` 三个 handler 全都读 `route.allRoutes`。`SourceBlock` 是**顶层函数**，看不到 `Card` 内部的 `decorate`，于是把**原始** `src.routes` 直接交给 `EntryRow` → `allRoutes === undefined`。
+
+**0.4.8 的修法**（就地装饰，`SourceBlock` 不动）：
+
+```js
+// Card 的 render 里，创建 SourceBlock 时：
+source: Object.assign({}, src, { routes: src.routes.map(decorate(src)) }),
+```
+
+⚠️ 注意**不能**写成 `src.routes.map(decorate(src))` 放进 `SourceBlock` 内部 —— `decorate` 不在那个作用域，会 `ReferenceError: decorate is not defined`（本会话踩过）。
+
+**影响面**：`onRemove(route)` 与 `onUrlSave(route, url)` 都会崩（后者是"改代理网址"）；`onSwitch` 走的是另一分支，0.4.7 下侥幸不崩。
+
+### 缺陷 D/E（0.4.8 仍带）—— tab 没文字 + 「＋代理网址」复制已有网址
+
+**D. 两个一级 tab 按钮没有文字**：`TEXT.tabSources` / `TEXT.tabBasic` **从未在 TEXT 表里定义**（模板引用 `undefined` → 按钮渲染成空胶囊）。定稿文案见 `preview/卡片交互预览_v3.html` L194-195：**入口源管理 / 基础设置**。
+
+**E. 点「＋ 代理网址」会把已有代理网址整批复制**：
+
+```js
+// 错误写法（0.4.8）
+var urls = src.routes.map(r2 => ({ url: r2.url })).filter(r2 => isHttpUrl(r2.url));
+```
+
+`src.routes` 里**既有内置入口也有用户自己加的入口**，全量回传 `routeExtras` ⇒ 宿主把内置直连/备用当新条目追加 ⇒ 每次点击都翻倍。实测落盘证据：
+
+```jsonc
+// storages/websearch-direct/ui-config.json（用户只加过 1 条）
+"routeExtras": { "bing": [ {"url":"https://cn.bing.com"}, {"url":"https://www.bing.com"},
+                           {"url":"https://cn.bing.com"}, {"url":"https://www.bing.com"} ] }
+```
+
+**正确写法（0.4.9）**：内置源只回传「用户自己加的那些」——宿主快照里 `removable===true` 且非自定义源的路由就是 `routeExtras` 条目（宿主 `uiSnapshot` 的 `removable: !!r.extra || (isCustom && r.tier !== 0)`；`extra` 字段本身不外露，`removable` 是它唯一的对外投影）：
+
+```js
+var urls = src.routes.filter(r2 => r2.removable)
+                      .map(r2 => ({ url: r2.url }))
+                      .filter(r2 => isHttpUrl(r2.url));
+urls.push({ url: "" });
+```
+
+**⚠️ 「保存」按钮灰着不是 bug**：`dirty` 只统计 Key / 全局代理（`keyVal`/`clearFlag`/`proxyVal`），与定稿预览 L190/L221 **完全一致**；入口行的一切改动（网址、开关、增删）都是**即时 POST 落盘**，不经过「保存」。实测：`ui-config.json` 会在操作瞬间更新 mtime。
+
+### 为什么五个缺陷都能一路绿灯出厂
+
+本项目**没有任何客户端组件测试**。`test-v0.4-ui.mjs`（40 例）只测宿主半边数据面（mock ctx + 直调 HTTP 路由），**从不渲染 React 组件** —— 展开分支从未被执行过。
+
+### 修复
+
+1. A：`state.status/error/saving` → `statusMsg` / `error` / `saving`
+2. B：`actionsRow` 按 **`preview/卡片交互预览_v3.html` L203-232 的定稿实现重建**（恢复默认两段式防呆 4s 复位 → 放弃修改 → 保存；`saving || !dirty` 时保存禁用），handler 复用组件里已有的 `resetAll`/`discard`/`save`/`confirming`/`confirmTimer`
+3. C：`decorate(src)` 接进 `SourceBlock` 的 `source`（见上）
+4. D：补 `TEXT.tabSources` / `TEXT.tabBasic`（文案取自定稿预览）
+5. E：`onAddProxy` 改为只回传 `removable` 路由（见上）
+
+**新增的回归测试**（都在 `D:\DSH\tmp\wsd-install-check-20260921\`）：
+- `test-client-card-expand.mjs` —— 展开态能渲染（4 判据）
+- `test-client-remove-entry.mjs` —— 入口行三个 handler 不崩 + 删除后的 POST 载荷正确（6 判据）
+- `test-client-buttons.mjs` —— **全量按钮审计**（25 判据）：每个按钮存在/有文字/点击行为正确，含 tab 文案、＋代理网址载荷、两段式恢复默认、放弃修改不落盘、保存灰置语义
+
+两者都用 `renderToStaticMarkup` 驱动，**无浏览器**。关键手法见 §5 经验 15/16/17。
+
+**红 → 绿证据链**（都是当场跑的）：
+
+```
+0.4.6 展开态：      ❌ ReferenceError: state is not defined        exit 1
+修掉 A 之后：       ❌ ReferenceError: actionsRow is not defined   exit 1   ← 证明缺陷集恰好 A/B 两处
+0.4.7 入口行 ×：    ❌ TypeError: ... reading 'filter'  at onRemoveEntry    ← 缺陷 C
+0.4.8：             ✅ 展开 4/0 + 入口行 6/0                        exit 0
+```
+
+**教训**：`client.js` 的展开分支此前**从未被任何测试执行过**。"UI 有预览 HTML、用户看过定稿"不等于"实装代码能跑" —— 预览是独立实现，实装是另一份代码，两者必须各验一次。
 
 ---
 
@@ -19,11 +118,38 @@
 | 内容 | 路径 |
 | --- | --- |
 | 插件源码（交接主目录） | `C:/Users/Administrator/WorkBuddy/2026-09-19-19-14-44/dsh-websearch-direct/` |
-| 打包产物 | `D:/DSH/tmp/dsh-websearch-direct-0.4.6.tgz`（md5 `73bfbf92e5df97f45f65ef4578727c29`） |
+| 打包产物（**§10 冻结基线对应件**） | `D:/DSH/tmp/wsd-deploy/dsh-websearch-direct-0.4.6.tgz`（md5 `e8464f6572886ea1f3a4501efeb5c3f9`） |
+| ~~旧指路~~（**已过期，勿用**） | ~~`D:/DSH/tmp/dsh-websearch-direct-0.4.6.tgz`（md5 `73bfbf92e5df97f45f65ef4578727c29`）~~ → 2026-09-21 实测：该件 `dist=30766AF9 / client=17A3FBA3 / package.json=7195C69E`，**三项均与 §10 冻结基线不符**；另 `D:/DSH/tmp/wsd-preflight/…0.4.6.tgz`（md5 `c6ddcde6330a82174960a462314032f9`）为 `dist=B8555455 / client=711EE88E / package.json=B538BB00`，dist 亦不符。**同名三件内容互异，选件必须按 §10 哈希判，不许按文件名或 mtime 判。** |
 | 测试实例 profile | `D:/dsh-1/profiles/web/`（package.json 依赖指向上面的 tgz） |
 | 网关 | 端口 43130，启动命令见 §7 |
 | 运行时 UI 配置 | `<DSH_HOME>/storages/websearch-direct/ui-config.json`（测试实例 = `D:/dsh-1/storages/websearch-direct/ui-config.json`） |
 | 归档（历史版本） | 源码目录 `_archive/`：`v0.3.1-qualified`、`v0.4.3-rejected` |
+
+### 2.1 部署台账（2026-09-21 实测）
+
+| 实例 | profile | 装的是什么 | 判定依据 |
+| --- | --- | --- | --- |
+| **DSH Desktop（用户日常）** | `C:/Users/Administrator/AppData/Roaming/dsh-desktop/harness/profiles/web` | **0.4.9**（0.2.0 → 0.4.6 → 0.4.7 → 0.4.8 → 0.4.9） | 磁盘 `package.json` = 0.4.9；`dsh.client={"platform":"web"}`；`client/client.js` sha256前8=`A73C24E3`、`dist/index.js`=`7AC798EA`（宿主半边与 §10 基线逐字节相同）；manifest spec 与 lockfile 均指向 0.4.9 制品 |
+| 测试实例 | `D:/dsh-1/profiles/web` | 0.4.6（**浏览器半边坏的**，未由本次会话升级） | 未由本次会话复验 |
+
+⚠️ **制品台账（同名不同内容，选件必须按哈希判）**
+
+| 版本 | 制品 | md5 | client.js sha256前8 | dist/index.js |
+| --- | --- | --- | --- | --- |
+| 0.4.6 | `D:/DSH/tmp/wsd-deploy/dsh-websearch-direct-0.4.6.tgz` | `e8464f6572886ea1f3a4501efeb5c3f9` | `711EE88E`（**展开即崩**） | `7AC798EA` |
+| 0.4.7 | `D:/DSH/tmp/wsd-deploy/dsh-websearch-direct-0.4.7.tgz` | `6e1facdecd9e6e85920ad6cbdcad4604` | `97A7B6FD`（修了 A/B，**入口行操作仍崩**） | `7AC798EA` |
+| 0.4.8 | `D:/DSH/tmp/wsd-deploy/dsh-websearch-direct-0.4.8.tgz` | `d5109fdea2787b6acceebcd6c01d9701` | `A5DAC64B`（A/B/C 修，D/E 仍带） | `7AC798EA` |
+| **0.4.9** | **`D:/DSH/tmp/wsd-deploy/dsh-websearch-direct-0.4.9.tgz`** | **`e2ab74aa971a6649492fa4ed010783e0`** | **`A73C24E3`**（A–E 全修） | `7AC798EA` |
+
+⚠️ **升级前的旧状态（供回滚参照）**
+- Desktop 曾长期装 **0.2.0**（`D:/DSH/tmp/wsd-pkg/dsh-websearch-direct-0.2.0.tgz`）：`files` 白名单只有 `dist` + `cordis.patch.yml`、**无 `dsh.client`**、包内无 `client/` ⇒ 浏览器半边根本不存在 —— 这是「UI 写了却不生效」的根因（不是 UI 写错，是装错版本）。
+- 升级备份：`package.json.bak-wsd046-20260921-025623`（0.2.0→0.4.6）、`pnpm-lock.yaml.bak-wsd046-…`、`package.json.bak-wsd047-20260921-031651`（0.4.6→0.4.7）、`pnpm-lock.yaml.bak-wsd047-…`、`package.json.bak-wsd048-20260921-032439`（0.4.7→0.4.8）、`pnpm-lock.yaml.bak-wsd048-…`、`package.json.bak-wsd049-20260921-033238`（0.4.8→0.4.9）、`pnpm-lock.yaml.bak-wsd049-…`。
+
+⚠️ **升级方式**：`dsh plugin --profile web add file:D:/DSH/tmp/wsd-deploy/dsh-websearch-direct-<ver>.tgz`（走 Desktop 自带 pnpm 垫片；该垫片会为 Harness 运行中的实例做 EPERM 恢复，并**自动保护 generation 投影**，每次都输出 `excluded 1 / restored 1 generation projection(s)`）。副作用实测：**除本插件外，其余 16 个依赖、bundles 顺序（本插件仍在第 12 位）均零改动**。
+
+⚠️ **打包注意**：`pnpm pack` 可用（app 内无 npm）；**给原生 exe 传参时不要加 `2>&1`** —— 本机实测加了会被沙箱拒绝（`程序'node.exe'运行失败：拒绝访问`），去掉即成功。
+
+
 
 ## 3. 源码结构
 
@@ -118,6 +244,12 @@ dsh-websearch-direct/
 10. 用户口味：字段用官方模板（标签行徽标右置/通栏输入框/说明另起一行）；动作按钮右下角、顺序 恢复默认→放弃修改→保存、恢复默认不用 ghost 样式；一切改动"即时生效"，主保存只管 Key/全局代理。
 11. 网址输入**必须自动补 `https://`**（用户会直接输 `www.bilibili.com`，纯 isHttpUrl 校验会让保存按钮永远禁用）。
 12. 对 `render()` 全量重建的 UI 写自动化点击测试时，**每次点击后必须重新从根取节点**（旧引用是拆除前的树）。
+15. 🔴 **"预览定稿"≠"实装跑过"**：预览 HTML 是**另一份独立实现**，实装 `client/client.js` 是另一份代码。0.4.6 的教训 —— 用户在预览上定的稿没问题，实装里展开分支却带着 `state`/`actionsRow` 两处必崩缺陷出厂，因为**没有任何测试执行过实装代码的展开分支**。回归测试见 §0 末（`test-client-card-expand.mjs`）。
+16. 🔴 **写客户端组件测试时，必须在 `factory()` 之前替换 `react.useState`**：bundle 在 factory 期就执行了 `var useState = react.useState`（client.js L18-21）**捕获引用**，事后打补丁对组件**完全无效**（本会话踩过：patch 打完渲染仍然全绿，其实是根本没进展开分支 —— 假绿）。
+17. **展开分支的崩溃在页面上表现为"整张卡片从列表消失"**，而不是红屏或错误提示：宿主对槽位条目是**按条目捕获并卸载**（`slot entry crashed in settings.plugin.item`）。所以"卡片没了"要优先怀疑**展开时求值的那些表达式**（收起态不执行）。
+18. 🔴 **定义在 `Card` 内部的 helper，顶层子组件看不到**：`decorate` 定义在 `Card` 里，而 `SourceBlock` 是顶层函数 —— 直接在 `SourceBlock` 里调 `decorate(src)` 会 `ReferenceError: decorate is not defined`。正确做法是在 `Card` 的 render 里就地装饰后再传下去（`source: Object.assign({}, src, { routes: src.routes.map(decorate(src)) })`）。
+19. 🔴 **"定义了"≠"被调用"**：`decorate` 是**死代码**（全文件只有定义、零调用点），3 个 handler 却都依赖它补的字段。写完 helper 要搜一遍调用点；静态检查"函数存在"完全抓不到这类缺陷。**判据**：`Select-String -Pattern 'decorate'` 只命中定义行 = 它从未生效过。
+20. **测试渲染到"类目"一层还不够**：`CategoryBox` 的 children 在 `open=false` 时返回 `null`，`EntryRow` 不会被创建。入口行级断言必须同时把 `openCats` 置为 `{<catId>: true}`（见 §6）。
 
 ### 其他
 
@@ -128,9 +260,28 @@ dsh-websearch-direct/
 
 ```bash
 cd C:/Users/Administrator/.workbuddy/binaries/node/workspace   # cwd 决定依赖解析
-node C:/Users/Administrator/WorkBuddy/2026-09-19-19-14-44/dsh-websearch-direct/test-v0.3.mjs all    # 引擎/回归，16✅
-node C:/Users/Administrator/WorkBuddy/2026-09-19-19-14-44/dsh-websearch-direct/test-v0.4-ui.mjs     # 数据面，14✅
+node D:/DSH/tmp/wsd-work/dsh-websearch-direct/test-v3-model.mjs   # 宿主半边 v3 模型，期望 28/0
+node D:/DSH/tmp/wsd-work/dsh-websearch-direct/test-v0.4-ui.mjs    # 宿主半边数据面，期望 40/0
 ```
+
+**客户端半边的回归测试（0.4.7/0.4.8 新增，无浏览器）**：改任何 `client.js` 都必须跑这两条。
+
+```bash
+$NODE = "D:/DSH Desktop/resources/app/node_modules/node/bin/node.exe"
+$T    = "D:/DSH/tmp/wsd-install-check-20260921"
+
+& $NODE $T/test-client-card-expand.mjs   <被测 client.js 路径>   # 期望 4 通过 / 0 失败
+& $NODE $T/test-client-remove-entry.mjs  <被测 client.js 路径>   # 期望 6 通过 / 0 失败
+```
+
+| 套件 | 覆盖 | 对 0.4.6 | 对 0.4.7 | 对 0.4.8 |
+| --- | --- | --- | --- | --- |
+| `test-client-card-expand.mjs` | 展开态能渲染（不抛错 / `wsd-tabs` / `wsd-scroll` / 头部） | ❌ `state is not defined` | ✅ 4/0 | ✅ 4/0 |
+| `test-client-remove-entry.mjs` | 入口行 `onRemove`/`onSwitch`/`onUrlSave` 不崩 + 删除载荷正确 | — | ❌ 4 红（含 `reading 'filter'`） | ✅ 6/0 |
+
+⚠️ 这两个套件都靠**替换 `react.useState`** 把组件驱动到展开态，且必须让 **`cardOpen`(第 8 个) 与 `openCats`(第 10 个) 同时为真** —— 只展开卡片、不展开类目的话，`EntryRow` **根本不会被创建**（`CategoryBox` 在 `open=false` 时返回 `null`），入口行测试会**假红/空转**。本会话踩过。
+
+⚠️ 上表 `test-v3-model` / `test-v0.4-ui` 只覆盖**宿主半边**：它们 mock ctx + 直调 HTTP 路由，**从不渲染 React 组件**。这就是 A/B/C 三个客户端缺陷能一路绿灯出厂的原因。
 
 注意：UI 测试会写 `~/.dsh/storages/websearch-direct/ui-config.json`（shim 环境），与线上配置（`D:/dsh-1/...`）互不影响。
 
