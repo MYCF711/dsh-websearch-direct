@@ -57,7 +57,9 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, unlinkSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import tls from 'node:tls';
 
 /**
  * Where to look for our own optional dependencies.
@@ -547,15 +549,27 @@ function pinnedRoute(id) {
  * host would be worse than not routing at all, so only clear signals count.
  * Package-manager vocabulary is split out so "npm registry 镜像" lands on the
  * package group instead of on a repo host.
+ *
+ * The code-intent set holds only signals that name a code HOST or an explicit
+ * source-code query. Bare technology nouns — `cli`, `sdk`, `framework`,
+ * `library` — were removed: they occur constantly in ordinary how-do-I
+ * questions ("怎么写 cli 工具", "哪个 framework 好学"), where a general web
+ * engine is the better source and a repo-host search returns nothing useful.
+ * A code host is still reachable through the general engines when the query
+ * really is about one, so a missed signal costs a round trip, not the answer;
+ * a false positive costs the whole search. Bias toward not matching.
  */
 const PKG_INTENT =
   /(\bnpm\b|\bpnpm\b|\byarn\b|\bpip\b|\bpypi\b|\bcargo\b|\bcrates?\b|\bmaven\b|\bgradle\b|\bnuget\b|\bgems?\b|rubygems|packagist|composer|\bgo mod\b|包管理|依赖包|第三方库)/i;
 
 const CODE_INTENT =
-  /(github|gitlab|gitee|codeberg|gitea|gitcode|\bgit\b|\brepos?\b|repositor|开源|源码|源代码|代码库|仓库|插件仓库|dsh[- _]?plugin|\blibrar|\bframework\b|\bsdk\b|\bcli\b)/i;
+  /(github|gitlab|gitee|codeberg|gitea|gitcode|\bgit\b|\brepos?\b|repositor|\brepo\b|开源项目|开源库|源码|源代码|代码库|插件仓库|仓库地址|\bdsh[- _]?plugin\b|\bgithub\.com|克隆|clone 下来)/i;
 
 const DEFAULTS = {
   proxyUrl: '',
+  // 本地加速器（Steamcommunity 302 等）会做 TLS 中间人，其根证书不在 Node 的
+  // 内置信任列表里。留空则按 loadProxyCa() 的常见位置自动探测。
+  proxyCaFile: '',
   engineOrder: ['bing', 'baidu', 'duckduckgo'],
   autoRoute: true,
   githubToken: '',
@@ -579,6 +593,11 @@ export const Config = Schema
       proxyUrl: Schema.string().default('').description(
         '代理地址，留空则直连。例如 http://127.0.0.1:7890（Clash 默认端口）。' +
         '海外引擎（DuckDuckGo）在直连环境下通常不可达，填了代理才会被真正用到。'
+      ),
+      proxyCaFile: Schema.string().default('').description(
+        '代理的 TLS 信任锚（PEM 或 DER 证书路径）。本地加速器（如 Steamcommunity 302）' +
+        '会用自签证书做中间人，Node 不读 Windows 证书store，不填会报 ' +
+        'unable to get local issuer certificate。留空则自动探测常见位置。'
       ),
       engineOrder: Schema.array(Schema.union(ALL_ENGINE_IDS))
         .default(DEFAULTS.engineOrder)
@@ -707,7 +726,7 @@ const NO_PROXY = () => ({ dispatcher: undefined, fetchImpl: null });
 // earlier revision did — makes every proxied call silently fall back to a direct
 // connection, with no warning and no error. Verified by pointing proxyUrl at a
 // black hole port: only a correctly shaped return value makes the request fail.
-let cachedProxy = { proxyUrl: null, dispatcher: null, fetchImpl: null };
+let cachedProxy = { key: null, dispatcher: null, fetchImpl: null };
 
 /**
  * 缓存的是 **Promise**，不是解析结果。
@@ -720,28 +739,253 @@ let cachedProxy = { proxyUrl: null, dispatcher: null, fetchImpl: null };
  */
 let undiciPromise = null;
 let proxyWarned = false;
-/** 同一个 proxyUrl 的首次构造也只做一次，避免并发调用各造一个 ProxyAgent。 */
-let proxyBuild = { url: null, promise: null };
+/**
+ * The build cache is keyed by BOTH proxyUrl and proxyCaFile.
+ *
+ * Keying on `proxyUrl` alone meant switching `proxyCaFile` (or fixing a wrong
+ * one) had no effect until the process restarted: the second call matched the
+ * cached entry, returned in ~0ms with no log, and kept using the old dispatcher
+ * and its old trust anchors. NUL is the separator because it cannot appear in
+ * either a URL or a filesystem path.
+ */
+let proxyBuild = { key: null, promise: null };
 
 function getUndici() {
   if (!undiciPromise) undiciPromise = optionalImport('undici');
   return undiciPromise;
 }
 
-/** `{ dispatcher, fetchImpl }` — both undefined when there is nothing to proxy. */
-async function resolveProxy(proxyUrl, logger) {
-  if (!proxyUrl) return NO_PROXY();
-  if (cachedProxy.proxyUrl === proxyUrl && cachedProxy.dispatcher) return cachedProxy;
+/** Cache key for the dispatcher: proxy identity AND its trust anchors. */
+function proxyCacheKey(proxyUrl, proxyCaFile) {
+  return proxyUrl + '\u0000' + (proxyCaFile || '');
+}
 
-  if (proxyBuild.url !== proxyUrl || !proxyBuild.promise) {
-    proxyBuild = { url: proxyUrl, promise: buildProxy(proxyUrl, logger) };
+/** `{ dispatcher, fetchImpl }` — both undefined when there is nothing to proxy. */
+async function resolveProxy(proxyUrl, logger, proxyCaFile) {
+  if (!proxyUrl) return NO_PROXY();
+  const key = proxyCacheKey(proxyUrl, proxyCaFile);
+  if (cachedProxy.key === key && cachedProxy.dispatcher) return cachedProxy;
+
+  if (proxyBuild.key !== key || !proxyBuild.promise) {
+    proxyBuild = { key, promise: buildProxy(proxyUrl, logger, proxyCaFile) };
   }
   const built = await proxyBuild.promise;
-  if (built.dispatcher) cachedProxy = built;
+  if (built.dispatcher) cachedProxy = { ...built, key };
   return built;
 }
 
-async function buildProxy(proxyUrl, logger) {
+/**
+ * TLS trust anchors for a MITM-ing local proxy.
+ *
+ * A local accelerator (Steamcommunity 302 and friends) terminates TLS itself, so
+ * every response is signed by its own root. Node does NOT read the Windows
+ * certificate store, so the handshake dies with `unable to get local issuer
+ * certificate` unless the anchor is handed over explicitly.
+ *
+ * The path comes from `proxyCaFile` (or `$WEBS..._PROXY_CA`); see
+ * `resolveProxyCa()` for the auto-discovery fallbacks. Returns null when no
+ * anchor is configured AND none is found on disk, in which case the proxy is
+ * used with default trust — correct for a proxy that does not intercept TLS.
+ */
+function loadProxyCa(configuredPath, logger) {
+  const candidates = [];
+  if (configuredPath) candidates.push({ path: configuredPath, explicit: true });
+
+  // Auto-discovery is deliberately conservative: only well-known accelerator
+  // locations, never a directory scan of the user's profile.
+  const local = process.env.LOCALAPPDATA;
+  const appdata = process.env.APPDATA;
+  if (local) {
+    const acc = join(local, 'Steam++', 'Plugins', 'Accelerator');
+    // The accelerator ships TWO independent PKIs and which one signs a given
+    // host differs by site: `SteamTools Certificate` (RSA) vs
+    // `Steamcommunity302 - 2026 ECC Root` (ECDSA, used for HuggingFace here).
+    // A single file is therefore not enough — every candidate is CONCATENATED
+    // into one trust bundle, so whichever chain the proxy presents verifies.
+    candidates.push(
+      { path: join(acc, 'SteamTools.Certificate.cer'), bundle: true },
+      { path: join(acc, 'Steamcommunity302.ECC.cer'), bundle: true },
+      { path: join(acc, 'Steamcommunity302.ECC.Root.cer'), bundle: true },
+      { path: join(acc, 'SteamTools.Certificate.pem'), bundle: true },
+    );
+  }
+  if (appdata) {
+    // A discovery candidate, NOT an explicit one: it simply may not exist, and
+    // warning about that would be noise. `explicit` is reserved for a path the
+    // user actually configured, where silence would hide a typo.
+    candidates.push({ path: join(appdata, 'dsh-websearch-direct', 'proxy-ca.pem') });
+  }
+
+  const collected = [];
+  const seenCert = new Set();
+  for (const c of candidates) {
+    try {
+      // An explicitly configured path is a stated intent: if it cannot be used,
+      // say so rather than silently substituting auto-discovery. (This check
+      // used to `continue` before reaching the warn below, so a typo'd path
+      // produced no output at all and the user never learned their setting was
+      // ignored.)
+      if (!existsSync(c.path)) {
+        if (c.explicit) {
+          logger?.warn?.(
+            `websearch-direct: proxyCaFile=${c.path} 不存在（或不可读），已改用自动探测。` +
+              '若代理做 TLS 中间人，请求仍可能报 unable to get local issuer certificate。'
+          );
+        }
+        continue;
+      }
+      const pem = readCertFileAsPem(c.path);
+      if (!pem) {
+        if (c.explicit) {
+          logger?.warn?.(`websearch-direct: proxyCaFile=${c.path} 中未找到证书，已改用自动探测。`);
+        }
+        continue;
+      }
+      if (c.explicit) {
+        logger?.info?.(`websearch-direct: 代理 TLS 信任锚已加载（${c.path}）`);
+        return pem;
+      }
+      // The same root is reachable from several of these paths (and again from
+      // the Windows store below); dedupe by body so the bundle stays small.
+      const body = pem.replace(/-----[A-Z ]+-----/g, '').replace(/\s+/g, '');
+      if (seenCert.has(body)) continue;
+      seenCert.add(body);
+      collected.push({ path: c.path, pem });
+    } catch (err) {
+      if (c.explicit) {
+        logger?.warn?.(
+          `websearch-direct: 读取 proxyCaFile=${c.path} 失败（${err.message}），` +
+            '若代理做 TLS 中间人，请求会报 unable to get local issuer certificate。'
+        );
+      }
+    }
+  }
+
+  // Windows store anchors: the ECC root trusted by Windows lives only in the
+  // registry, and the file-based candidates above carry the RSA PKI only.
+  const fromStore = loadRootsFromWindowsStore(logger) || '';
+  const storeParts = [];
+  for (const block of fromStore.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) || []) {
+    const body = block.replace(/-----[A-Z ]+-----/g, '').replace(/\s+/g, '');
+    if (seenCert.has(body)) continue;
+    seenCert.add(body);
+    storeParts.push(block.trim() + '\n');
+  }
+
+  const bundle = collected.map((x) => x.pem.trim() + '\n').join('') + storeParts.join('');
+  if (bundle.trim()) {
+    logger?.info?.(
+      `websearch-direct: 代理 TLS 信任锚已加载（${collected.length} 个文件 + ${storeParts.length} 张 store 证书）`,
+    );
+    return bundle;
+  }
+  return null;
+}
+
+/** Read one certificate file (PEM or DER) as a PEM string, or null. */
+function readCertFileAsPem(path) {
+  const buf = readFileSync(path);
+  if (!buf.length) return null;
+  // Sniff the actual bytes: a DER file may coincidentally CONTAIN the ASCII
+  // text "-----BEGIN CERTIFICATE-----" somewhere in its binary payload, so
+  // testing `content.includes(header)` on a utf8 read is not a reliable
+  // discriminator — it silently skips the DER→PEM wrap and hands raw binary
+  // to `ca`, which then either throws or validates against the wrong cert.
+  const isPem =
+    buf[0] === 0x2d &&
+    buf.subarray(0, 64).toString('latin1').includes('-----BEGIN CERTIFICATE-----');
+  if (isPem) {
+    const pem = buf.toString('utf8');
+    return pem.includes('-----BEGIN CERTIFICATE-----') ? pem : null;
+  }
+  const b64 = buf.toString('base64');
+  const pem =
+    '-----BEGIN CERTIFICATE-----\n' +
+    b64.replace(/(.{64})/g, '$1\n').trim() +
+    '\n-----END CERTIFICATE-----\n';
+  return pem.includes('-----BEGIN CERTIFICATE-----') ? pem : null;
+}
+
+/**
+ * Pull the accelerator's roots out of the Windows certificate stores.
+ *
+ * The ECC root is trusted by Windows but lives only in the registry, so there is
+ * no file to read, and Node does not consult that store — hence exporting it.
+ *
+ * Deliberately avoids the `Cert:` PowerShell drive: that drive exists in
+ * PowerShell 7 (`pwsh.exe`) but NOT in the Windows PowerShell 5.1
+ * (`powershell.exe`) that is normally on PATH, where the cmdlet fails with
+ * "Cannot find drive. A drive with the name 'Cert' does not exist." and the
+ * lookup silently yields nothing. `certutil` behaves identically everywhere.
+ *
+ * Best-effort throughout: returns null when the lookup fails for any reason.
+ */
+function loadRootsFromWindowsStore(logger) {
+  // `pwsh.exe` (PowerShell 7) is required, not `powershell.exe`: the `Cert:`
+  // drive exists in the former but NOT in Windows PowerShell 5.1, where the
+  // same cmdlet fails with "Cannot find drive. A drive with the name 'Cert'
+  // does not exist." and silently yields zero certificates. Verified on this
+  // machine: powershell.exe -> 0 certs, pwsh.exe -> the expected roots.
+  const script =
+    "$c = Get-ChildItem Cert:\\CurrentUser\\Root,Cert:\\LocalMachine\\Root,Cert:\\CurrentUser\\CA -ErrorAction SilentlyContinue | " +
+    "Where-Object { $_.Subject -match 'Steamcommunity302|SteamTools' }; " +
+    'foreach ($x in $c) { "-----BEGIN CERTIFICATE-----"; ' +
+    '[Convert]::ToBase64String($x.RawData, "InsertLineBreaks"); ' +
+    '"-----END CERTIFICATE-----" }';
+
+  for (const exe of ['pwsh.exe', 'pwsh', 'powershell.exe']) {
+    try {
+      const out = execFileSync(exe, ['-NoProfile', '-NonInteractive', '-Command', script], {
+        encoding: 'utf8',
+        timeout: 20000,
+        windowsHide: true,
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      if (out && out.includes('-----BEGIN CERTIFICATE-----')) {
+        const n = (out.match(/BEGIN CERTIFICATE/g) || []).length;
+        logger?.info?.(`websearch-direct: 已从 Windows 证书store 导出 ${n} 张代理根证书（${exe}）`);
+        return out;
+      }
+    } catch {
+      /* try the next interpreter */
+    }
+  }
+  return null;
+}
+
+/**
+ * Wrap a trust bundle so it AUGMENTS Node's built-in roots instead of replacing
+ * them.
+ *
+ * This is the difference between "the agent can read HuggingFace" and "the agent
+ * can read nothing else": a local accelerator MITMs only the hosts in its own
+ * rule list and passes every other host through with its REAL certificate.
+ * Passing `ca` replaces the default trust store outright, so every pass-through
+ * host then fails with `unable to get local issuer certificate`. Measured here
+ * with the accelerator's CA alone:
+ *
+ *   huggingface.co     -> 200 (MITM'd by the accelerator)
+ *   example.com        -> unable to get local issuer certificate
+ *   cn.bing.com        -> unable to get local issuer certificate
+ *
+ * Prepending `tls.rootCertificates` restores the pass-through hosts while
+ * keeping the accelerator's hosts working.
+ */
+function withBuiltinRoots(extraPem) {
+  if (!extraPem) return extraPem;
+  try {
+    // `tls.rootCertificates` is Node's bundled Mozilla root list as PEM.
+    const builtin = tls.rootCertificates;
+    if (Array.isArray(builtin) && builtin.length) {
+      return builtin.join('\n') + '\n' + extraPem;
+    }
+  } catch {
+    /* fall through: use the extra anchors alone */
+  }
+  return extraPem;
+}
+
+async function buildProxy(proxyUrl, logger, proxyCaFile) {
   const mod = await getUndici();
   const ProxyAgent = mod?.ProxyAgent ?? mod?.default?.ProxyAgent;
   const fetchImpl = mod?.fetch ?? mod?.default?.fetch ?? null;
@@ -761,7 +1005,16 @@ async function buildProxy(proxyUrl, logger) {
   try {
     // Agent 和 fetch 必须来自同一个 undici 实例：跨实例的 ProxyAgent 会被
     // 全局 fetch 拒绝（TypeError: fetch failed）。见文件顶部的代理说明。
-    const dispatcher = new ProxyAgent(proxyUrl);
+    //
+    // `ca` 必须同时挂在 connect 和 requestTls 上，只挂 connect 不够 ——
+    // connect 管的是「到代理本身」的那条 TLS（本地加速器通常是明文，用不上），
+    // requestTls 管的才是「代理到目标站点」的 TLS，也就是加速器做中间人、
+    // 出示自签证书的那一段。实测只传 connect.ca 仍然报
+    // `unable to get local issuer certificate`；两处都传才通。
+    const ca = withBuiltinRoots(loadProxyCa(proxyCaFile, logger));
+    const dispatcher = ca
+      ? new ProxyAgent({ uri: proxyUrl, connect: { ca }, requestTls: { ca } })
+      : new ProxyAgent(proxyUrl);
     return { proxyUrl, dispatcher, fetchImpl };
   } catch (err) {
     if (!proxyWarned) {
@@ -772,8 +1025,8 @@ async function buildProxy(proxyUrl, logger) {
   }
 }
 
-async function request(url, { proxyUrl, timeoutMs, signal, accept, ua, extraHeaders, logger } = {}) {
-  const { dispatcher, fetchImpl } = await resolveProxy(proxyUrl, logger);
+async function request(url, { proxyUrl, proxyCaFile, timeoutMs, signal, accept, ua, extraHeaders, logger } = {}) {
+  const { dispatcher, fetchImpl } = await resolveProxy(proxyUrl, logger, proxyCaFile);
   const doFetch = fetchImpl || fetch;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -1323,15 +1576,90 @@ function renderSources(sources) {
 
 /* ------------------------------------------------------------ GitHub 镜像 */
 
+/**
+ * Mirror entry points, split by what they can actually do.
+ *
+ * These are NOT interchangeable, and treating them as one list was the bug:
+ * `gh-proxy.com` (and friends) are *file download* accelerators. Pointed at a
+ * page URL (`github.com/<owner>/<repo>`) they do not proxy it — they answer 200
+ * with their OWN landing page, which the caller then hands to the model as if it
+ * were the repository. Measured directly on this machine:
+ *
+ *   https://gh-proxy.com/https://github.com/deepseek-ai/deepseek-harness
+ *     -> 200, 58374 bytes, body contains "加速下载代理 / 靠谱机场"
+ *   https://gh-proxy.com/https://raw.githubusercontent.com/<valid>/README.md
+ *     -> 404  (a legitimate raw URL: the mirror simply does not serve this path)
+ *
+ * So: only raw-file hosts are mirrorable, and every mirror response must pass
+ * `looksLikeGithubContent()` before it is believed.
+ */
 const GH_MIRRORS = ['https://ghproxy.net/', 'https://ghfast.top/', 'https://gh-proxy.com/'];
+
+/** Hosts a file-download accelerator can actually serve. `github.com` is NOT one. */
 const GH_MIRRORABLE =
-  /^https?:\/\/(raw\.githubusercontent\.com|github\.com|objects\.githubusercontent\.com|codeload\.github\.com|gist\.githubusercontent\.com|gist\.github\.com)\//i;
+  /^https?:\/\/(raw\.githubusercontent\.com|objects\.githubusercontent\.com|codeload\.github\.com|gist\.githubusercontent\.com)\//i;
+
+/**
+ * Signatures of an accelerator's own marketing/landing page.
+ *
+ * These must NOT be applied to a whole file on a bare substring match: plenty of
+ * legitimate content mentions them (this plugin's own README and source do), and
+ * a false positive rejects a perfectly good fetch. They are only meaningful
+ * together with landing-page STRUCTURE — see `looksLikeGithubContent()`.
+ */
+const MIRROR_LANDING_MARKERS =
+  /加速下载代理|靠谱机场|机场推荐|节点与流量统计|文件加速|镜像加速|sourceforge 加速/i;
+
+/** Phrases specific to an accelerator's own site chrome, not to real content. */
+const MIRROR_SITE_NAMES = /ghproxy|ghfast|gh-proxy|cors\.isteed/i;
+
+/**
+ * Whether a mirror response plausibly IS the requested object rather than the
+ * proxy's own page.
+ *
+ * The primary rule is STRUCTURAL, not brand-based: every host in
+ * `GH_MIRRORABLE` serves a file (README, source, tarball, LFS blob), so an HTML
+ * document is never the requested object. Brand matching alone is unreliable —
+ * a landing page can be rebranded or served from a new domain and would sail
+ * past a keyword list, which is exactly the failure this guards against.
+ *
+ * The brand check is kept only as a second, independent signal for the corner
+ * case of a mirror that answers a *page* request (never `raw.`) with HTML: there
+ * it must also look like accelerator chrome. Erring toward rejection is correct
+ * here — a false rejection just moves to the next mirror or reports an honest
+ * error, while a false acceptance hands fabricated content to the model.
+ */
+function looksLikeGithubContent(text, url) {
+  if (typeof text !== 'string' || !text.trim()) return false;
+
+  const head = text.slice(0, 4000);
+  // Leading HTML comments and an XML prolog are common before the root element
+  // (tag managers, tracking snippets, XHTML), and a landing page that opens with
+  // either would otherwise slip past a `^\s*` anchor — so skip them first.
+    const looksHtmlAndEarly =
+    /^\s*(?:\x3C\x21\x2D\x2D(?:(?!\x2D\x2D\x3E)[\s\S])*\x2D\x2D\x3E\s*|<\?xml[^>]*\?>\s*)*(?:\x3C\x21doctype html|\x3Chtml[\s\x3E])/i.test(
+      head,
+    );
+
+  // A mirrorable host serves bytes, never a document.
+  if (looksHtmlAndEarly) return false;
+  if (/<html[\s>]|<!doctype html|<head[\s>]/i.test(head)) {
+    // Some HTML may appear deep in a file (a template, a fixture). Only reject
+    // when it is an actual document that also carries accelerator chrome.
+    if (MIRROR_LANDING_MARKERS.test(head) || MIRROR_SITE_NAMES.test(head)) return false;
+  }
+  return true;
+}
 
 /**
  * Fetch a URL, falling back to a GitHub acceleration mirror when the direct
  * connection cannot reach it. Mainland networks frequently cannot open
  * raw.githubusercontent.com even though api.github.com works, so a mirror is
  * often the difference between "the agent can read the file" and not.
+ *
+ * A mirror response is validated before use; a mirror that returns its own page
+ * is treated as a failure and the next one is tried. When every mirror fails the
+ * error says so instead of returning something plausible-looking and wrong.
  */
 async function fetchWithMirrors(url, opts) {
   try {
@@ -1342,6 +1670,9 @@ async function fetchWithMirrors(url, opts) {
     for (const mirror of GH_MIRRORS) {
       try {
         const text = await request(mirror + url, opts);
+        if (!looksLikeGithubContent(text, url)) {
+          throw new Error('返回的不是目标文件（疑似加速站落地页或错误页面）');
+        }
         return { text, via: mirror.replace(/\/+$/, '') };
       } catch (e) {
         errors.push(`${mirror} → ${e.message}`);
@@ -1361,64 +1692,49 @@ function routeLine(id) {
   return ` 　 入口（自动回退）: ${rs.map((r) => `${r.label}[${marks[r.tier] || r.tier}]`).join(' → ')}`;
 }
 
-/** Grouped description — the model's map of the engines. */
+/**
+ * Tool description.
+ *
+ * Trimmed to what the parameter actually needs. The engine inventory used to
+ * be expanded here one engine per line (label + reachability + what-it-is +
+ * when-to-use + entry list), which duplicated both ENGINE_META and the
+ * system-prompt section, and grew with every configured custom URL. The model
+ * does not need a catalogue to pass a query; `autoRoute` already picks a
+ * source, and the ids below are enough for the rare explicit override.
+ */
 function toolDescription(cfg) {
-  const line = (id) => {
-    const m = ENGINES_META[id];
-    const hasDirect = (m.routes || []).some((r) => r.tier === 0);
-    const reach = m.direct === false ? '直连不可达，走镜像' : hasDirect ? '直连可用' : '仅镜像入口';
-    const token = m.token && !engineReady(id, cfg) ? '，当前未配置令牌→自动跳过' : '';
-    const rl = routeLine(id);
-    return `  - ${id}（${m.label}，${reach}${token}）: ${m.what}。适合：${m.useWhen}${rl ? `\n${rl}` : ''}`;
-  };
+  const usable = (id) => engineReady(id, cfg) && ENGINES_META[id].group !== 'composite';
   return [
-    '网页/代码/依赖包搜索，可显式指定搜索引擎。当任务明显匹配某个引擎时优先用本工具，而不是通用搜索。',
-    '代码仓库类（省略 engine 时自动走 repo 多源合并）：',
-    ...REPO_ENGINES.map(line),
-    `  - repo（多源合并，推荐）: 并行查询 ${membersOf('repo', cfg).join(' + ')}，按来源轮转合并，避免只看 GitHub`,
-    '依赖包类（省略 engine 时自动走 pkg 多源合并）：',
-    ...PKG_ENGINES.map(line),
-    `  - pkg（多源合并，推荐）: 并行查询 ${membersOf('pkg', cfg).join(' + ')}`,
-    '通用网页：',
-    ...WEB_ENGINES.map(line),
-    '请求的是「源」，不是「入口」：同一个源的直连 / 镜像 / 加速代理由插件内部按顺序回退，',
-    '你不需要也不应该把镜像当成独立的搜索引擎。想强制走某条入口时才用这些别名：',
-    `  ${Object.entries(ENGINE_ALIASES).map(([a, v]) => `${a}→${v.engine}(${v.route})`).join('｜')}`,
-    cfg.autoRoute === false
-      ? '省略 engine 时按配置的 engineOrder 顺序尝试。'
-      : '省略 engine 时自动路由：依赖包意图 → pkg；代码/仓库/插件意图 → repo；其余按配置顺序。',
-    'engine 传 auto 等同于省略。若某个引擎失败（限流、反爬、无令牌），会自动降级到下一个。',
-    '返回值里的 routes 字段记录了每个源实际用了哪条入口 —— 结果异常时先看它，再怀疑内容。',
+    '网页 / 代码 / 依赖包搜索，可显式指定搜索源。',
+    '省略 engine 时自动选源并按直连→镜像→加速代理顺序回退，失败自动降级；通常直接用 web_search 即可。',
+    `可用 engine：${ENGINE_IDS.filter(usable).join(' / ')}；repo / pkg 为多源合并，auto 或省略等同自动路由。`,
+    '返回值里的 routes 记录了每个源实际用的入口；结果异常时先看它。',
   ].join('\n');
 }
 
 /**
  * System-prompt guidance placed right after the stock `web_search` section.
- * Tool descriptions tell the model *what exists*; this tells it *which one to
- * reach for*, which is what actually changes behaviour.
+ *
+ * Deliberately minimal. Entry fallback (direct → mirror → proxy → accelerator)
+ * is the plugin's own job and is invisible to the model until it fails, so
+ * teaching it is wasted context. Engine selection is already automatic
+ * (`autoRoute`), so the prompt only states that fact and lists what ids exist
+ * for the rare case where the model already knows a better source. Anything
+ * phrased as "find X → use engine Y" is redundant routing advice that costs
+ * context on every request without changing behaviour.
  */
 function enginePrompt(cfg) {
   const usable = (id) => engineReady(id, cfg) && ENGINES_META[id].group !== 'composite';
-  const list = ENGINE_IDS.filter(usable)
-    .map((id) => {
-      const m = ENGINES_META[id];
-      const n = (m.routes || []).length;
-      return `${id}=${m.label}（${m.what}${n > 1 ? `；${n} 条入口自动回退` : ''}）`;
-    })
-    .join('；');
-  return [
-    `可用搜索引擎：${list}。`,
-    '每个引擎背后可能有多个入口（直连 / 镜像 / 加速代理），插件自己会按顺序回退，你不需要关心走的是哪条路。',
-    '当任务明显匹配某个引擎时，用 web_search_engine 并显式指定 engine，而不是笼统地用 web_search：',
-    '· 找开源项目 / 库 / 框架 / SDK / CLI / 插件源码、对比同类实现 → engine="repo"（默认多源合并：GitHub + GitLab + Codeberg + Gitea，配了 Gitee 令牌还会带上码云），不要只指定 github，否则会漏掉其他托管站的项目',
-    '· 找依赖包 / 库的版本与下载量（npm / Rust / PHP / .NET / Ruby / Java / HuggingFace 模型） → engine="pkg"',
-    '· 找模型 / 数据集 → engine="huggingface"；只看某一个源 → engine="gitlab"、"engine="codeberg" 等',
-    '· 纯中文内容、国内站点、百科、问答、论坛帖 → engine="baidu"',
-    '· 技术文档 / 教程 / 新闻 / 产品官网 / 报错信息（中英文通用） → 省略 engine，默认走 Bing 中国（与 Edge 默认搜索引擎一致）',
+  const ids = ENGINE_IDS.filter(usable);
+  const autoLine =
     cfg.autoRoute === false
-      ? '当前配置已关闭自动路由，省略 engine 时按 engineOrder 顺序尝试。'
-      : '省略 engine 时会自动路由：依赖包意图 → pkg，代码/仓库/插件意图 → repo，其余按 Bing → 百度 顺序。',
-    '回答时说明结果来自哪个搜索引擎及其局限（例如仓库类搜索只覆盖各托管站的公开项目，不代表全网；镜像入口的数据可能比官方源滞后）。',
+      ? '未指定 engine 时按配置顺序尝试。'
+      : '未指定 engine 时自动选源（依赖包→pkg，代码仓库→repo，其余→通用网页）。';
+  return [
+    `联网搜索默认走 web_search；它会自动选源，并在直连不可用时依次回退到镜像 / 加速代理，失败自动降级——无需你干预，也无须关心实际走了哪条路。`,
+    autoLine,
+    `仅在你已确知某个源更合适时才用 web_search_engine 指定 engine，可选：${ids.join(' / ')}。`,
+    '结果里的 routes 字段记录了每个源实际用的入口；结果异常时先看它，再怀疑内容。',
   ].join('\n');
 }
 
@@ -1729,6 +2045,10 @@ export function apply(ctx, config) {
       '';
     return {
       proxyUrl: globalProxy,
+      proxyCaFile:
+        (c.proxyCaFile || '').trim() ||
+        (process.env.DSH_WEBSEARCH_PROXY_CA || '').trim() ||
+        '',
       timeoutMs: Number(c.timeoutMs) || DEFAULTS.timeoutMs,
       maxResults: Number(c.maxResults) || DEFAULTS.maxResults,
       githubToken:
