@@ -11,6 +11,17 @@
 
 ## v0.4：设置页卡片（浏览器半边）
 
+> ⚠ **宿主版本区间（2026-10-27 实测）**：卡片依赖宿主的 `settingsScope` 服务
+> 与 `settings.plugin.item` 槽位。`@deepseek-ai/dsh-client-ui-settings`
+> **0.1.6-alpha.2 是最后一个带 `settingsScope` 的版本，0.1.7-alpha.1 起已移除**
+> （0.2.0-rc.2 的 `app.asar` 整包检索，`settingsScope` / `settings.plugin.item`
+> 均 0 命中；现在第三方 bundle 的配置座位是 `plugins.bundle.config` /
+> `plugins.row.config`）。
+> 本插件的 inject 是**嵌套**的，服务缺失时 cordis 静默跳过 ——
+> 所以 **DSH ≥ 0.1.7 上这张卡片不会出现，也不报错**，
+> 「设置界面里找不到它」是该区间的必然结果，与桌面端/浏览器端无关。
+> 搜索与抓取本身不受影响；没卡片时怎么配见下一节。
+
 设置 → 插件 页里属于本插件的栏位，实现遵循 dsh 的「插件自带浏览器半边就拥有
 自己的卡片」契约（与 dshmarket 同一套机制）：
 
@@ -38,6 +49,35 @@
 
 配置持久化在 `<DSH_HOME>/storages/websearch-direct/ui-config.json`，与 cordis
 配置解耦：卡片是这个文件的唯一写者。
+
+### 没有设置卡片时（DSH ≥ 0.1.7）
+
+卡片只是 UI，配置本身两条路都能改：
+
+1. 把 `web` 通道指到本插件 —— `<DSH_HOME>/profiles/<profile>/cordis.patch.yml`：
+
+   ```yaml
+   - id: web
+     config:
+       searchProvider: websearch-direct
+       fetchProvider: websearch-direct
+   ```
+
+2. 运行期参数（Key / 全局代理 / 入口开关 / 自定义源）改
+   `<DSH_HOME>/storages/websearch-direct/ui-config.json`，字段与卡片一一对应。
+   ⚠ 该文件**只在宿主插件启动时读一次**（`dist/index.js` 的 `loadUiState()`），
+   手改后要**重启 DSH**；不想重启就等价的走 HTTP 数据面：
+
+   ```bash
+   # 读当前快照
+   curl -s http://127.0.0.1:<port>/dsh-websearch-direct/api/config
+   # 改（字段同卡片，改动即时生效，无需重启）
+   curl -s -X POST http://127.0.0.1:<port>/dsh-websearch-direct/api/config \
+        -H 'content-type: application/json' \
+        -d '{"proxyUrl":"http://127.0.0.1:7890"}'
+   # 恢复默认
+   curl -s -X POST http://127.0.0.1:<port>/dsh-websearch-direct/api/reset
+   ```
 
 ## 它解决什么
 
