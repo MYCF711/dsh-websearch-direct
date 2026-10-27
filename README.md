@@ -1,5 +1,19 @@
 # dsh-websearch-direct
 
+> ## ⛔ 已停止维护（2026-10-28 归档，只读）
+>
+> **为什么停**：宿主 DSH 自 `0.1.7-alpha.1` 起移除了 `settingsScope` 服务与 `settings.plugin.item`
+> 槽位（`@deepseek-ai/dsh-client-ui-settings` 的 `0.1.6-alpha.2` 是最后一个还带着它的版本），
+> 本插件的设置卡片从此**永久不显示**，且不报错 —— 详见 issue #1 的结论与证据。
+> 搜索/抓取功能本身仍然能用，但有更省事的上位替代：
+> [`@liustack/modsearch`](https://www.npmjs.com/package/@liustack/modsearch)（免 API Key，且跟得上宿主版本）。
+>
+> **这个仓库值得留的东西**（代码停了，两样东西没过期）：
+> - 「引擎 = 逻辑源，路由 = 指向同一份内容的入口」这个模型，以及顺序回退 + 结果标注 `via` 的做法
+> - README 里那张**实测可用性表**：20 多个镜像/加速入口逐个测过，哪些通、哪些是假的（连签发者都对不上的那种）
+>
+> **还想用它**：归档只读但 `git clone` 照常、代码照常跑。没有设置卡片时的配置方法见下面「没有设置卡片时」一节。
+
 给 DeepSeek Harness（dsh）用的 **免 API Key** 联网搜索 / 网页抓取插件。
 
 零配置装上就能用：不填任何 Key、不走任何 LLM、不消耗模型 token。
