@@ -10,11 +10,14 @@
  * once at startup.
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SRC = path.dirname(fileURLToPath(import.meta.url));
-const HOME = 'C:\\Users\\Administrator\\AppData\\Roaming\\dsh-desktop\\harness';
+// DSH Desktop 的 harness 根目录：默认取当前用户，可用 DSH_HOME_DIR 覆盖。
+const HOME = process.env.DSH_HOME_DIR
+  || path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "dsh-desktop", "harness");
 const PROFILE = path.join(HOME, 'profiles', 'web');
 const DEST = path.join(PROFILE, 'node_modules', 'dsh-websearch-direct');
 const PKG = path.join(PROFILE, 'package.json');

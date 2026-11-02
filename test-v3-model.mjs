@@ -13,7 +13,7 @@
  *   V3-5 routeExtras（内置源追加入口）enabled 的读盘 / POST / 运行时三条路径
  *   V3-6 v1 遗留形状读盘不崩 + 幂等
  *
- * 用法（cwd 必须是 C:/Users/Administrator/.workbuddy/binaries/node/workspace）：
+ * 用法（cwd 必须是 <HOME>/.workbuddy/binaries/node/workspace）：
  *   node test-v3-model.mjs
  *   WSD_DIST=<任意副本>/dist/index.js node test-v3-model.mjs   # 打旧代码取 red 证据
  */

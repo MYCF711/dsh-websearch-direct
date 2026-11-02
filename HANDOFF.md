@@ -84,7 +84,7 @@ urls.push({ url: "" });
 4. D：补 `TEXT.tabSources` / `TEXT.tabBasic`（文案取自定稿预览）
 5. E：`onAddProxy` 改为只回传 `removable` 路由（见上）
 
-**新增的回归测试**（都在 `D:\DSH\tmp\wsd-install-check-20260921\`）：
+**新增的回归测试**（都在 `<TMP>\wsd-install-check-20260921\`）：
 - `test-client-card-expand.mjs` —— 展开态能渲染（4 判据）
 - `test-client-remove-entry.mjs` —— 入口行三个 handler 不崩 + 删除后的 POST 载荷正确（6 判据）
 - `test-client-buttons.mjs` —— **全量按钮审计**（25 判据）：每个按钮存在/有文字/点击行为正确，含 tab 文案、＋代理网址载荷、两段式恢复默认、放弃修改不落盘、保存灰置语义
@@ -117,9 +117,9 @@ urls.push({ url: "" });
 
 | 内容 | 路径 |
 | --- | --- |
-| 插件源码（交接主目录） | `C:/Users/Administrator/WorkBuddy/2026-09-19-19-14-44/dsh-websearch-direct/` |
-| 打包产物（**§10 冻结基线对应件**） | `D:/DSH/tmp/wsd-deploy/dsh-websearch-direct-0.4.6.tgz`（md5 `e8464f6572886ea1f3a4501efeb5c3f9`） |
-| ~~旧指路~~（**已过期，勿用**） | ~~`D:/DSH/tmp/dsh-websearch-direct-0.4.6.tgz`（md5 `73bfbf92e5df97f45f65ef4578727c29`）~~ → 2026-09-21 实测：该件 `dist=30766AF9 / client=17A3FBA3 / package.json=7195C69E`，**三项均与 §10 冻结基线不符**；另 `D:/DSH/tmp/wsd-preflight/…0.4.6.tgz`（md5 `c6ddcde6330a82174960a462314032f9`）为 `dist=B8555455 / client=711EE88E / package.json=B538BB00`，dist 亦不符。**同名三件内容互异，选件必须按 §10 哈希判，不许按文件名或 mtime 判。** |
+| 插件源码（交接主目录） | `<HOME>/WorkBuddy/2026-09-19-19-14-44/dsh-websearch-direct/` |
+| 打包产物（**§10 冻结基线对应件**） | `<TMP>/wsd-deploy/dsh-websearch-direct-0.4.6.tgz`（md5 `e8464f6572886ea1f3a4501efeb5c3f9`） |
+| ~~旧指路~~（**已过期，勿用**） | ~~`<TMP>/dsh-websearch-direct-0.4.6.tgz`（md5 `73bfbf92e5df97f45f65ef4578727c29`）~~ → 2026-09-21 实测：该件 `dist=30766AF9 / client=17A3FBA3 / package.json=7195C69E`，**三项均与 §10 冻结基线不符**；另 `<TMP>/wsd-preflight/…0.4.6.tgz`（md5 `c6ddcde6330a82174960a462314032f9`）为 `dist=B8555455 / client=711EE88E / package.json=B538BB00`，dist 亦不符。**同名三件内容互异，选件必须按 §10 哈希判，不许按文件名或 mtime 判。** |
 | 测试实例 profile | `D:/dsh-1/profiles/web/`（package.json 依赖指向上面的 tgz） |
 | 网关 | 端口 43130，启动命令见 §7 |
 | 运行时 UI 配置 | `<DSH_HOME>/storages/websearch-direct/ui-config.json`（测试实例 = `D:/dsh-1/storages/websearch-direct/ui-config.json`） |
@@ -129,23 +129,23 @@ urls.push({ url: "" });
 
 | 实例 | profile | 装的是什么 | 判定依据 |
 | --- | --- | --- | --- |
-| **DSH Desktop（用户日常）** | `C:/Users/Administrator/AppData/Roaming/dsh-desktop/harness/profiles/web` | **0.4.9**（0.2.0 → 0.4.6 → 0.4.7 → 0.4.8 → 0.4.9） | 磁盘 `package.json` = 0.4.9；`dsh.client={"platform":"web"}`；`client/client.js` sha256前8=`A73C24E3`、`dist/index.js`=`7AC798EA`（宿主半边与 §10 基线逐字节相同）；manifest spec 与 lockfile 均指向 0.4.9 制品 |
+| **DSH Desktop（用户日常）** | `<HOME>/AppData/Roaming/dsh-desktop/harness/profiles/web` | **0.4.9**（0.2.0 → 0.4.6 → 0.4.7 → 0.4.8 → 0.4.9） | 磁盘 `package.json` = 0.4.9；`dsh.client={"platform":"web"}`；`client/client.js` sha256前8=`A73C24E3`、`dist/index.js`=`7AC798EA`（宿主半边与 §10 基线逐字节相同）；manifest spec 与 lockfile 均指向 0.4.9 制品 |
 | 测试实例 | `D:/dsh-1/profiles/web` | 0.4.6（**浏览器半边坏的**，未由本次会话升级） | 未由本次会话复验 |
 
 ⚠️ **制品台账（同名不同内容，选件必须按哈希判）**
 
 | 版本 | 制品 | md5 | client.js sha256前8 | dist/index.js |
 | --- | --- | --- | --- | --- |
-| 0.4.6 | `D:/DSH/tmp/wsd-deploy/dsh-websearch-direct-0.4.6.tgz` | `e8464f6572886ea1f3a4501efeb5c3f9` | `711EE88E`（**展开即崩**） | `7AC798EA` |
-| 0.4.7 | `D:/DSH/tmp/wsd-deploy/dsh-websearch-direct-0.4.7.tgz` | `6e1facdecd9e6e85920ad6cbdcad4604` | `97A7B6FD`（修了 A/B，**入口行操作仍崩**） | `7AC798EA` |
-| 0.4.8 | `D:/DSH/tmp/wsd-deploy/dsh-websearch-direct-0.4.8.tgz` | `d5109fdea2787b6acceebcd6c01d9701` | `A5DAC64B`（A/B/C 修，D/E 仍带） | `7AC798EA` |
-| **0.4.9** | **`D:/DSH/tmp/wsd-deploy/dsh-websearch-direct-0.4.9.tgz`** | **`e2ab74aa971a6649492fa4ed010783e0`** | **`A73C24E3`**（A–E 全修） | `7AC798EA` |
+| 0.4.6 | `<TMP>/wsd-deploy/dsh-websearch-direct-0.4.6.tgz` | `e8464f6572886ea1f3a4501efeb5c3f9` | `711EE88E`（**展开即崩**） | `7AC798EA` |
+| 0.4.7 | `<TMP>/wsd-deploy/dsh-websearch-direct-0.4.7.tgz` | `6e1facdecd9e6e85920ad6cbdcad4604` | `97A7B6FD`（修了 A/B，**入口行操作仍崩**） | `7AC798EA` |
+| 0.4.8 | `<TMP>/wsd-deploy/dsh-websearch-direct-0.4.8.tgz` | `d5109fdea2787b6acceebcd6c01d9701` | `A5DAC64B`（A/B/C 修，D/E 仍带） | `7AC798EA` |
+| **0.4.9** | **`<TMP>/wsd-deploy/dsh-websearch-direct-0.4.9.tgz`** | **`e2ab74aa971a6649492fa4ed010783e0`** | **`A73C24E3`**（A–E 全修） | `7AC798EA` |
 
 ⚠️ **升级前的旧状态（供回滚参照）**
-- Desktop 曾长期装 **0.2.0**（`D:/DSH/tmp/wsd-pkg/dsh-websearch-direct-0.2.0.tgz`）：`files` 白名单只有 `dist` + `cordis.patch.yml`、**无 `dsh.client`**、包内无 `client/` ⇒ 浏览器半边根本不存在 —— 这是「UI 写了却不生效」的根因（不是 UI 写错，是装错版本）。
+- Desktop 曾长期装 **0.2.0**（`<TMP>/wsd-pkg/dsh-websearch-direct-0.2.0.tgz`）：`files` 白名单只有 `dist` + `cordis.patch.yml`、**无 `dsh.client`**、包内无 `client/` ⇒ 浏览器半边根本不存在 —— 这是「UI 写了却不生效」的根因（不是 UI 写错，是装错版本）。
 - 升级备份：`package.json.bak-wsd046-20260921-025623`（0.2.0→0.4.6）、`pnpm-lock.yaml.bak-wsd046-…`、`package.json.bak-wsd047-20260921-031651`（0.4.6→0.4.7）、`pnpm-lock.yaml.bak-wsd047-…`、`package.json.bak-wsd048-20260921-032439`（0.4.7→0.4.8）、`pnpm-lock.yaml.bak-wsd048-…`、`package.json.bak-wsd049-20260921-033238`（0.4.8→0.4.9）、`pnpm-lock.yaml.bak-wsd049-…`。
 
-⚠️ **升级方式**：`dsh plugin --profile web add file:D:/DSH/tmp/wsd-deploy/dsh-websearch-direct-<ver>.tgz`（走 Desktop 自带 pnpm 垫片；该垫片会为 Harness 运行中的实例做 EPERM 恢复，并**自动保护 generation 投影**，每次都输出 `excluded 1 / restored 1 generation projection(s)`）。副作用实测：**除本插件外，其余 16 个依赖、bundles 顺序（本插件仍在第 12 位）均零改动**。
+⚠️ **升级方式**：`dsh plugin --profile web add file:<TMP>/wsd-deploy/dsh-websearch-direct-<ver>.tgz`（走 Desktop 自带 pnpm 垫片；该垫片会为 Harness 运行中的实例做 EPERM 恢复，并**自动保护 generation 投影**，每次都输出 `excluded 1 / restored 1 generation projection(s)`）。副作用实测：**除本插件外，其余 16 个依赖、bundles 顺序（本插件仍在第 12 位）均零改动**。
 
 ⚠️ **打包注意**：`pnpm pack` 可用（app 内无 npm）；**给原生 exe 传参时不要加 `2>&1`** —— 本机实测加了会被沙箱拒绝（`程序'node.exe'运行失败：拒绝访问`），去掉即成功。
 
@@ -235,7 +235,7 @@ dsh-websearch-direct/
 
 5. 启动网关**必须 `--no-open`**（否则拉浏览器触发沙箱 reg.exe 黑名单，进程被杀）；用 `Bash run_in_background=true` 起。
 6. 本机 curl 一律 `--noproxy '*'`（全局代理劫持 localhost 返回 502）。
-7. **测试脚本 cwd 必须在 WorkBuddy node workspace**（`C:/Users/Administrator/.workbuddy/binaries/node/workspace`），否则 undici / `@deepseek-ai/dsh-tools` 解析不到（代理测试会假失败）。
+7. **测试脚本 cwd 必须在 WorkBuddy node workspace**（`<HOME>/.workbuddy/binaries/node/workspace`），否则 undici / `@deepseek-ai/dsh-tools` 解析不到（代理测试会假失败）。
 8. GUI 程序 / 无头浏览器（agent-browser 的 snapshot/screenshot）常被沙箱 SIGTERM——UI 验证交给用户浏览器，或用 DOM shim 模拟点击做逻辑验证。
 
 ### UI/交互（用户多轮定稿的结论）
@@ -259,16 +259,16 @@ dsh-websearch-direct/
 ## 6. 测试
 
 ```bash
-cd C:/Users/Administrator/.workbuddy/binaries/node/workspace   # cwd 决定依赖解析
-node D:/DSH/tmp/wsd-work/dsh-websearch-direct/test-v3-model.mjs   # 宿主半边 v3 模型，期望 28/0
-node D:/DSH/tmp/wsd-work/dsh-websearch-direct/test-v0.4-ui.mjs    # 宿主半边数据面，期望 40/0
+cd <HOME>/.workbuddy/binaries/node/workspace   # cwd 决定依赖解析
+node <TMP>/wsd-work/dsh-websearch-direct/test-v3-model.mjs   # 宿主半边 v3 模型，期望 28/0
+node <TMP>/wsd-work/dsh-websearch-direct/test-v0.4-ui.mjs    # 宿主半边数据面，期望 40/0
 ```
 
 **客户端半边的回归测试（0.4.7/0.4.8 新增，无浏览器）**：改任何 `client.js` 都必须跑这两条。
 
 ```bash
-$NODE = "D:/DSH Desktop/resources/app/node_modules/node/bin/node.exe"
-$T    = "D:/DSH/tmp/wsd-install-check-20260921"
+$NODE = "<DSH_HOME> Desktop/resources/app/node_modules/node/bin/node.exe"
+$T    = "<TMP>/wsd-install-check-20260921"
 
 & $NODE $T/test-client-card-expand.mjs   <被测 client.js 路径>   # 期望 4 通过 / 0 失败
 & $NODE $T/test-client-remove-entry.mjs  <被测 client.js 路径>   # 期望 6 通过 / 0 失败
@@ -289,10 +289,10 @@ $T    = "D:/DSH/tmp/wsd-install-check-20260921"
 
 ```bash
 cd /d/dsh-1 && DSH_HOME='D:\dsh-1' \
-  "C:/Users/Administrator/.workbuddy/binaries/node/versions/22.22.2-3/node.exe" \
-  "C:/Users/Administrator/.workbuddy/binaries/node/workspace/node_modules/@deepseek-ai/dsh/lib/bin.js" \
+  "<HOME>/.workbuddy/binaries/node/versions/22.22.2-3/node.exe" \
+  "<HOME>/.workbuddy/binaries/node/workspace/node_modules/@deepseek-ai/dsh/lib/bin.js" \
   --profile web --port 43130 --no-open \
-  > "D:/DSH/tmp/_gw-43130.log" 2>&1
+  > "<TMP>/_gw-43130.log" 2>&1
 # （用 run_in_background 起；启动后从日志取本次 token：http://127.0.0.1:43130/?token=…）
 ```
 
@@ -333,7 +333,7 @@ package.json        sha256(前 16)=B538BB00
 README.md           sha256(前 16)=8F3E5D1A
 ```
 
-⚠️ **预检全绿**（本次发布校验报告在 `D:/DSH/tmp/wsd-preflight/PREFLIGHT.md`）：
+⚠️ **预检全绿**（本次发布校验报告在 `<TMP>/wsd-preflight/PREFLIGHT.md`）：
 - `npm pack --dry-run` entryCount=6（**LICENSE 在内**）、BOM 全无、`package.json` 合法（`license=GPL-3.0-only`）
 - 无污染文件、无额外输出
 
@@ -342,9 +342,9 @@ README.md           sha256(前 16)=8F3E5D1A
 ## 11. 复跑命令（交付后验证方式）
 
 ```bash
-cd C:/Users/Administrator/.workbuddy/binaries/node/workspace
-node D:/DSH/tmp/wsd-work/dsh-websearch-direct/test-v3-model.mjs   # 期望 26/0
-node D:/DSH/tmp/wsd-work/dsh-websearch-direct/test-v0.4-ui.mjs    # 期望 38/0
+cd <HOME>/.workbuddy/binaries/node/workspace
+node <TMP>/wsd-work/dsh-websearch-direct/test-v3-model.mjs   # 期望 26/0
+node <TMP>/wsd-work/dsh-websearch-direct/test-v0.4-ui.mjs    # 期望 38/0
 ```
 
 ⚠️ **退出码必须用可信通道**：`spawnSync(..., {stdio:'ignore'})` 读 `status`，或 sentinel `.cmd` + `%ERRORLEVEL%`。
